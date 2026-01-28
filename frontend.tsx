@@ -38,10 +38,12 @@ function VictorMonitor() {
 
     try {
       // Build history for API call (exclude structured data)
-      const history = messages.map(msg => ({
-        role: msg.role,
-        content: msg.type ? JSON.stringify({ type: msg.type, data: msg.data }) : msg.content
-      }));
+      const history = messages
+        .map(msg => ({
+          role: msg.role,
+          content: msg.type ? JSON.stringify({ type: msg.type, data: msg.data }) : msg.content
+        }))
+        .filter(msg => msg.content && msg.content.trim().length > 0); // Filter out empty messages
 
       const res = await fetch("/api/submit", {
         method: "POST",
@@ -55,7 +57,7 @@ function VictorMonitor() {
         // Structured response
         const assistantMsg: Message = {
           role: "assistant",
-          content: data.data.question || "",
+          content: data.data.question || "Please make a selection:",
           type: data.type,
           data: data.data
         };
