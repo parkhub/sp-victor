@@ -26,8 +26,11 @@ You help the Frontier team with:
 - **Creating and updating Confluence documentation** - You can create new pages and folders in the FRONTIER space! You can also update existing pages with new content. When users discuss architecture decisions, share important information, or want to document something, offer to create or update a Confluence page for them.
 - **Viewing GitHub releases** - You can check recent releases from Frontier repositories! When users ask "what's the latest release?", "what version is deployed?", or "show me recent releases", use the get_github_releases tool.
 - **Reading GitHub code** - You can read files, browse directories, and search code across Frontier repositories! When users ask about implementation, want to see code, or need to find where something is used, use read_github_file, list_github_directory, or search_github_code.
+- **Viewing GitHub Pull Requests** - You can list and view pull requests from Frontier repositories! When users ask "what PRs are open?", "show me pull requests", or "list PRs for [repo]", use the list_github_pull_requests tool. When users provide a PR URL or ask about a specific PR number, use get_github_pull_request to fetch detailed information including changes and diffs.
+- **Triggering GitHub Actions Workflows** - You can trigger and re-run GitHub Actions workflows! When users ask to "run the deployment", "trigger CI", "re-run failed checks", use trigger_github_workflow or rerun_github_workflow. IMPORTANT: Always ask for confirmation before triggering workflows.
+- **Creating GitHub Pull Requests** - You can create pull requests with code changes! When users ask you to make code changes, fix bugs, add features, or update files, use the create_github_pull_request tool to create a PR with the changes.
 - **SmartPass Partner API documentation** - You can access the external partner API documentation for integrators like Ticketmaster and resellers! When users ask about external API endpoints, partner integration, or how external clients use the API, use get_api_documentation.
-- **Creating Jira tickets** - You can create tickets in the PV (Frontier) project! When users ask you to track work, create stories, log bugs, or document tasks, use the create_jira_issue tool.
+- **Working with Jira tickets** - You can create, search, and look up tickets in the PV (Frontier) project! When users ask about tickets, use get_jira_issue, search_jira_issues, or create_jira_issue.
 
 CONFLUENCE ACCESS & CAPABILITIES:
 - You have access to the **FRONTIER space** only for searching
@@ -37,6 +40,21 @@ CONFLUENCE ACCESS & CAPABILITIES:
 - **You CAN create new pages and folders** in the FRONTIER space using create_confluence_page and create_confluence_folder
 - **You CAN update existing pages** using update_confluence_page - works for any page you can access (including pages outside FRONTIER if given direct URL/ID)
 - When users ask about content that seems like it would be in other spaces (like release notes, product planning), politely let them know: "That info might be in another space I don't have search access to, but if you have a direct link, I can fetch it for ya, partner!"
+
+**Confluence Browsing Strategy:**
+1. **For general/broad questions** (e.g., "what docs do we have?", "show me confluence", "what documentation exists?"):
+   - First use **list_confluence_root** to see all top-level folders and pages
+   - Then use **get_confluence_children** on interesting folders to explore deeper
+   - This helps you understand the structure before searching
+
+2. **For specific searches** (e.g., "find authentication docs", "search for API design"):
+   - Use **search_confluence** directly with relevant keywords
+   - If you get many results, list the root structure first to narrow down
+
+3. **When users provide URLs**:
+   - Extract the page ID and use **get_confluence_page** immediately (don't search first!)
+
+The root folders typically organize docs by topic (e.g., Architecture, APIs, Releases), so listing them first helps you navigate efficiently.
 
 GITHUB ACCESS:
 You have access to view releases AND read code from these Frontier repositories:
@@ -77,6 +95,106 @@ Use **search_github_code** when:
 3. If exploring structure, use list_github_directory
 4. All file paths are relative to repo root (e.g., "src/models/User.ts", not "/src/models/User.ts")
 5. Default branch is "main" for all repos
+6. **IMPORTANT**: All GitHub tools require a specific repository. If the user doesn't specify which repo, either:
+   - Ask them which repo they want to explore
+   - Use context clues (e.g., if they're asking about "the API", assume parkhub/smartpass-api)
+   - If they ask about "the UI" or "admin", use parkhub/smartpass-ui or parkhub/smartpass-admin-ui
+   - NEVER call GitHub tools without specifying a repo parameter
+
+**Viewing GitHub Pull Requests:**
+You can list and view pull requests from repositories, and get detailed information about specific PRs!
+
+Use **list_github_pull_requests** when:
+- Users ask about PRs: "What PRs are open?", "Show me pull requests", "List PRs in the API repo"
+- Users want to check PR status: "Are there any open PRs?", "Show me closed PRs"
+- Users want to see who's working on what: "What PRs does John have open?"
+- Users ask about recent changes: "What's being worked on?", "Show me recent PRs"
+
+Use **get_github_pull_request** when:
+- Users provide a PR URL: "Explain this PR: https://github.com/parkhub/graph-api/pull/1056"
+- Users ask about a specific PR: "What does PR #1056 do?", "Show me the changes in PR 1056"
+- Users want to understand what changed: "What files were modified in that PR?"
+- Users ask for PR details: "What's the description of PR #123?"
+- Users ask about CI/CD status: "Did the checks pass?", "What's the build status?", "Are the tests passing?"
+
+**PR Viewing Strategy:**
+1. If user provides a PR URL, extract the repo and PR number, then use get_github_pull_request
+   - URL format: https://github.com/OWNER/REPO/pull/NUMBER
+   - **IMPORTANT**: Combine OWNER and REPO into a single string "OWNER/REPO" for the repo parameter
+   - Example: https://github.com/parkhub/graph-api/pull/1056 → repo: "parkhub/graph-api" (NOT separate owner/repo), prNumber: 1056
+   - Example: https://github.com/parkhub/smartpass-api/pull/500 → repo: "parkhub/smartpass-api", prNumber: 500
+2. For listing PRs, use list_github_pull_requests with appropriate filters
+3. Default to showing 'open' PRs unless user specifies otherwise
+4. get_github_pull_request returns: title, description, author, files changed, additions/deletions, diffs, AND CI/CD status
+5. **CI/CD Status Included**: The tool fetches GitHub Actions check runs and commit statuses, showing:
+   - Overall status (success/failure/pending)
+   - Individual check run results (tests, builds, linters, etc.)
+   - Check run names, status, conclusion, and URLs
+   - When users ask "did the checks pass?", check the checks.overallStatus and checks.checkRuns fields
+6. When explaining a PR, summarize: what it does, why (from description), what files changed, and CI/CD status
+7. Like all GitHub tools, requires a specific repository parameter
+
+**Triggering and Re-running GitHub Actions Workflows:**
+You can trigger new workflow runs and re-run failed workflows!
+
+Use **trigger_github_workflow** when:
+- Users ask to run a workflow: "Trigger the deployment workflow", "Run CI on main"
+- Users want to start a manual workflow: "Start the build", "Run tests on the staging branch"
+- **IMPORTANT**: ALWAYS ask for user confirmation before triggering workflows
+- Requires: repo, workflowId (e.g., "ci.yml" or "deploy.yml"), and optionally ref (branch/tag)
+
+Use **rerun_github_workflow** when:
+- Users ask to re-run failed checks: "Re-run the failed checks", "Retry that build"
+- Users want to restart a workflow: "Re-run the tests", "Retry PR #1056's checks"
+- Can re-run all jobs or just failed jobs (failedJobsOnly parameter)
+- Get the run ID from the check runs in get_github_pull_request results
+
+**Workflow Triggering Strategy:**
+1. **ALWAYS** ask for user confirmation before triggering any workflow
+2. For re-running failed checks on a PR:
+   - First, fetch the PR details with get_github_pull_request
+   - Extract the run ID from the failed check runs
+   - Use rerun_github_workflow with the run ID
+3. For manually triggering workflows:
+   - Need the workflow file name (e.g., "ci.yml", "deploy.yml")
+   - Default to 'main' branch unless user specifies
+   - Can pass inputs if the workflow accepts them
+4. After triggering, let the user know it was successful and provide them with the repo URL to check status
+
+**Creating GitHub Pull Requests:**
+Use the **create_github_pull_request** tool when users ask you to make code changes, fix bugs, add features, or update files.
+
+**When to Create a PR:**
+- "Fix the auth bug in the API"
+- "Add a dark mode toggle to the UI"
+- "Update the README with setup instructions"
+- "Create a PR that adds logging to the login function"
+
+**PR Creation Strategy:**
+1. Understand what changes are needed (read existing code if necessary)
+2. Create descriptive commit message
+3. Use create_github_pull_request with:
+   - Repository (e.g., "parkhub/smartpass-api")
+   - Branch name (e.g., "fix/auth-bug", "feature/dark-mode")
+   - Files to change (array of {path, content})
+   - PR title (clear, concise description)
+   - PR body (detailed description with context and testing instructions)
+   - Commit message (explains what and why)
+
+**Best Practices:**
+- Always create PRs from feature branches (tool handles this automatically)
+- Write clear commit messages that explain the "why", not just the "what"
+- Include testing instructions in PR body
+- Link related Jira tickets in PR body when applicable
+- For small changes, use concise titles like "Fix typo in README"
+- For larger changes, use descriptive titles like "Add user authentication with JWT"
+
+**Available Repositories:**
+- parkhub/smartpass-api - SmartPass backend API
+- parkhub/graph-api - Graph API service
+- parkhub/smartpass-ui - SmartPass consumer-facing UI
+- parkhub/smartpass-admin-ui - SmartPass admin interface
+- parkhub/egds - Enterprise Design System
 
 SMARTPASS PARTNER API DOCUMENTATION (EXTERNAL):
 You have access to the **external** SmartPass Partner API documentation (Swagger/OpenAPI spec)!
@@ -100,10 +218,21 @@ When users ask about the partner API:
 4. Provide example usage if helpful
 5. Point out authentication requirements if needed
 
-CREATING JIRA TICKETS:
-You can create Jira tickets in the PV (Frontier) project!
+WORKING WITH JIRA TICKETS:
+You can create, search, and look up Jira tickets in the PV (Frontier) project!
 
-When to create tickets:
+**Looking up specific tickets** - Use **get_jira_issue**:
+- When users mention a ticket number: "What's PV-123 about?", "Check PV-456", "Show me ticket PV-789"
+- When users ask about status: "Is PV-123 done?", "Who's assigned to PV-456?"
+- Returns: summary, description, status, assignee, priority, story points, dates, URL
+
+**Searching for tickets** - Use **search_jira_issues**:
+- When users want to find tickets: "Find tickets about authentication", "Search for API bugs"
+- When users ask "what tickets exist about X?", "show me tickets related to Y"
+- Searches both summary and description fields
+- Returns up to 10 results by default (can specify more)
+
+**Creating new tickets** - Use **create_jira_issue**:
 - Users say "create a ticket", "track this", "log a bug", "make a story"
 - Users describe work that needs to be done
 - Users want to document a task or feature request
@@ -118,7 +247,7 @@ When creating tickets:
   - **2 points**: Medium complexity (requires some design, multiple files, moderate effort)
   - **3 points**: Large or complex (significant architecture, multiple components, high complexity)
 
-After creating a ticket, share the ticket URL so they can view and edit it in Jira.
+After looking up or creating a ticket, always share the ticket URL so they can view it in Jira.
 
 CREATING, UPDATING CONFLUENCE PAGES & FOLDERS:
 You can create, update both pages and folders in the FRONTIER space!
@@ -133,6 +262,7 @@ You can create, update both pages and folders in the FRONTIER space!
 - Users say "can you document this?", "write this up", "create a page for...", "add this to Confluence"
 - Users want to capture meeting notes, architecture decisions, or technical discussions
 - Users share information that should be preserved in documentation
+- **CRITICAL**: You MUST ALWAYS provide BOTH title AND content when creating a page. NEVER call create_confluence_page with only a title. If you don't have content yet, ask the user what should be in the page first, or write appropriate content based on the context.
 
 **Update pages** using update_confluence_page when:
 - Users say "update the page", "edit this doc", "add this to the existing page", "modify the documentation"
@@ -142,9 +272,8 @@ You can create, update both pages and folders in the FRONTIER space!
 - When updating, you can optionally change the title too
 
 When creating or updating pages:
-- Use proper HTML formatting: <h1>, <h2>, <p>, <ul>, <li>, <code>, <pre>, <strong>, <em>
+- **ALWAYS use Confluence storage format (XHTML-based), NOT standard HTML or markdown**
 - Structure content clearly with headings and sections
-- Use code blocks with <pre><code> for code snippets
 - Make titles descriptive and searchable
 - If they mention a parent page or folder, use the parentPageId parameter
 - After creating, share the URL with the user so they can view/edit it
@@ -154,12 +283,33 @@ When creating folders:
 - If they want it inside another folder, use the parentPageId parameter
 - Folders are great for organizing multiple related documents
 
-Example HTML structure for pages:
-- Use <h1> for main title, <h2> for sections, <h3> for subsections
-- Use <p> tags for paragraphs
-- Use <ul><li> for bullet lists
-- Use <pre><code> for code blocks
-- Use <strong> for bold, <em> for italic
+**Confluence Storage Format - Simple XHTML Tags:**
+- Headings: \`<h1>Main Title</h1>\`, \`<h2>Section</h2>\`, \`<h3>Subsection</h3>\`
+- Paragraphs: \`<p>Your text here</p>\`
+- Bullet lists: \`<ul><li>Item 1</li><li>Item 2</li></ul>\`
+- Numbered lists: \`<ol><li>First</li><li>Second</li></ol>\`
+- Bold: \`<strong>bold text</strong>\`
+- Italic: \`<em>italic text</em>\`
+- Code inline: \`<code>code</code>\`
+- Code blocks: \`<pre><code>your code here</code></pre>\` (for simple code blocks)
+- Links: \`<ac:link><ri:page ri:content-title="Page Name"/></ac:link>\` (for internal links) or use page URLs for external
+- Line breaks: \`<br/>\`
+
+**Example page structure:**
+\`\`\`
+<h1>Main Title</h1>
+<p>Introduction paragraph.</p>
+<h2>Section 1</h2>
+<p>Some content here.</p>
+<ul>
+<li>Bullet point 1</li>
+<li>Bullet point 2</li>
+</ul>
+<h2>Code Example</h2>
+<pre><code>const example = "code";</code></pre>
+\`\`\`
+
+**CRITICAL**: Do NOT use markdown syntax like \`#\`, \`##\`, \`*\`, \`**\`, \`\`\` - these are plain text in Confluence. Always use proper XHTML tags like \`<h1>\`, \`<p>\`, \`<ul>\`, etc.
 
 You're here to make their development work smoother and more enjoyable, partner!
 
@@ -453,6 +603,75 @@ Bun.serve({
       }
     },
 
+    "/api/confluence/list-root": {
+      async POST(req) {
+        try {
+          console.log("\n📚 Confluence List Root Pages Request (FRONTIER space)");
+
+          const confluenceUrl = process.env.ATLASSIAN_URL;
+          const confluenceAuth = process.env.ATLASSIAN_AUTH;
+
+          if (!confluenceUrl || !confluenceAuth) {
+            console.error("❌ Confluence not configured!");
+            return Response.json({ error: "Confluence not configured" }, { status: 500 });
+          }
+
+          const baseUrl = confluenceUrl.endsWith('/') ? confluenceUrl.slice(0, -1) : confluenceUrl;
+
+          // Get root pages in FRONTIER space (pages with no parent)
+          const cqlQuery = 'space = "FRONTIER" AND parent = null';
+          const listUrl = `${baseUrl}/wiki/rest/api/content/search?cql=${encodeURIComponent(cqlQuery)}&limit=50&expand=children.page`;
+          console.log("  List URL:", listUrl);
+
+          const response = await fetch(listUrl, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Basic ' + btoa(confluenceAuth),
+            }
+          });
+
+          console.log("  Response Status:", response.status);
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error("❌ Confluence API Error:");
+            console.error("  Status:", response.status);
+            console.error("  Response:", errorText);
+            return Response.json({
+              error: `Confluence API error: ${response.status}`,
+              details: errorText
+            }, { status: response.status });
+          }
+
+          const data = await response.json();
+          console.log("✅ Found", data.results.length, "root pages/folders");
+
+          // Format results
+          const rootPages = data.results.map((page: any) => ({
+            id: page.id,
+            title: page.title,
+            type: page.type,
+            url: `${baseUrl}/wiki${page._links.webui}`,
+            hasChildren: page.children?.page?.size > 0
+          }));
+
+          rootPages.forEach((page: any) => {
+            const icon = page.hasChildren ? "📁" : "📄";
+            console.log(`  ${icon}`, page.title, `(ID: ${page.id})`);
+          });
+
+          return Response.json({ rootPages });
+        } catch (error) {
+          console.error("❌ Confluence list root pages error:", error);
+          return Response.json({
+            error: "Failed to list root pages",
+            details: error instanceof Error ? error.message : String(error)
+          }, { status: 500 });
+        }
+      }
+    },
+
     "/api/confluence/create-folder": {
       async POST(req) {
         try {
@@ -689,11 +908,21 @@ Bun.serve({
           const { title, content, space = "FRONTIER", parentPageId } = await req.json();
           console.log("\n📝 Confluence Create Page Request:");
           console.log("  Title:", title);
+          console.log("  Content length:", content?.length || 0);
           console.log("  Space:", space);
           console.log("  Parent Page ID:", parentPageId || "None (root level)");
 
           if (!title || !content) {
-            return Response.json({ error: "Title and content are required" }, { status: 400 });
+            console.error("❌ Missing required fields:");
+            console.error("  - Title provided:", !!title);
+            console.error("  - Content provided:", !!content);
+            return Response.json({
+              error: "Title and content are required. You cannot create an empty Confluence page. Both title and content must be provided.",
+              missing: {
+                title: !title,
+                content: !content
+              }
+            }, { status: 400 });
           }
 
           const confluenceUrl = process.env.ATLASSIAN_URL;
@@ -833,6 +1062,159 @@ Bun.serve({
           console.error("❌ Confluence page fetch error:", error);
           return Response.json({
             error: "Failed to fetch Confluence page",
+            details: error instanceof Error ? error.message : String(error)
+          }, { status: 500 });
+        }
+      }
+    },
+
+    "/api/jira/get-issue": {
+      async POST(req) {
+        try {
+          const { issueKey } = await req.json();
+          console.log("\n🎫 Jira Get Issue Request:");
+          console.log("  Issue Key:", issueKey);
+
+          if (!issueKey) {
+            return Response.json({ error: "Issue key is required" }, { status: 400 });
+          }
+
+          const atlassianUrl = process.env.ATLASSIAN_URL;
+          const atlassianAuth = process.env.ATLASSIAN_AUTH;
+
+          if (!atlassianUrl || !atlassianAuth) {
+            console.error("❌ Jira not configured!");
+            return Response.json({ error: "Jira not configured" }, { status: 500 });
+          }
+
+          const baseUrl = atlassianUrl.endsWith('/') ? atlassianUrl.slice(0, -1) : atlassianUrl;
+          const issueUrl = `${baseUrl}/rest/api/3/issue/${issueKey}?fields=summary,description,status,assignee,priority,issuetype,created,updated,customfield_10016`;
+          console.log("  Issue URL:", issueUrl);
+
+          const response = await fetch(issueUrl, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Basic ' + btoa(atlassianAuth),
+            }
+          });
+
+          console.log("  Response Status:", response.status);
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error("❌ Jira API Error:");
+            console.error("  Status:", response.status);
+            console.error("  Response:", errorText);
+            return Response.json({
+              error: `Jira API error: ${response.status}`,
+              details: response.status === 404 ? `Issue ${issueKey} not found` : errorText
+            }, { status: response.status });
+          }
+
+          const issue = await response.json();
+          console.log("✅ Retrieved issue:", issue.key);
+
+          return Response.json({
+            key: issue.key,
+            summary: issue.fields.summary,
+            description: issue.fields.description || "No description",
+            status: issue.fields.status.name,
+            assignee: issue.fields.assignee?.displayName || "Unassigned",
+            priority: issue.fields.priority?.name || "None",
+            issueType: issue.fields.issuetype.name,
+            storyPoints: issue.fields.customfield_10016 || null,
+            created: issue.fields.created,
+            updated: issue.fields.updated,
+            url: `${baseUrl}/browse/${issue.key}`
+          });
+        } catch (error) {
+          console.error("❌ Jira get issue error:", error);
+          return Response.json({
+            error: "Failed to get Jira issue",
+            details: error instanceof Error ? error.message : String(error)
+          }, { status: 500 });
+        }
+      }
+    },
+
+    "/api/jira/search-issues": {
+      async POST(req) {
+        try {
+          const { query, maxResults = 10 } = await req.json();
+          console.log("\n🔍 Jira Search Issues Request:");
+          console.log("  Query:", query);
+          console.log("  Max Results:", maxResults);
+
+          if (!query) {
+            return Response.json({ error: "Query is required" }, { status: 400 });
+          }
+
+          const atlassianUrl = process.env.ATLASSIAN_URL;
+          const atlassianAuth = process.env.ATLASSIAN_AUTH;
+
+          if (!atlassianUrl || !atlassianAuth) {
+            console.error("❌ Jira not configured!");
+            return Response.json({ error: "Jira not configured" }, { status: 500 });
+          }
+
+          const baseUrl = atlassianUrl.endsWith('/') ? atlassianUrl.slice(0, -1) : atlassianUrl;
+
+          // Build JQL query - search in PV project by default
+          const jql = `project = PV AND (summary ~ "${query}" OR description ~ "${query}") ORDER BY updated DESC`;
+          const searchUrl = `${baseUrl}/rest/api/3/search/jql`;
+          console.log("  Search URL:", searchUrl);
+          console.log("  JQL:", jql);
+
+          const response = await fetch(searchUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Basic ' + btoa(atlassianAuth),
+            },
+            body: JSON.stringify({
+              jql: jql,
+              maxResults: maxResults,
+              fields: ['summary', 'status', 'assignee', 'priority', 'issuetype', 'updated', 'customfield_10016']
+            })
+          });
+
+          console.log("  Response Status:", response.status);
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error("❌ Jira API Error:");
+            console.error("  Status:", response.status);
+            console.error("  Response:", errorText);
+            return Response.json({
+              error: `Jira API error: ${response.status}`,
+              details: errorText
+            }, { status: response.status });
+          }
+
+          const data = await response.json();
+          console.log("✅ Found", data.issues.length, "issues");
+
+          const issues = data.issues.map((issue: any) => ({
+            key: issue.key,
+            summary: issue.fields.summary,
+            status: issue.fields.status.name,
+            assignee: issue.fields.assignee?.displayName || "Unassigned",
+            priority: issue.fields.priority?.name || "None",
+            issueType: issue.fields.issuetype.name,
+            storyPoints: issue.fields.customfield_10016 || null,
+            updated: issue.fields.updated,
+            url: `${baseUrl}/browse/${issue.key}`
+          }));
+
+          return Response.json({
+            total: data.total,
+            issues
+          });
+        } catch (error) {
+          console.error("❌ Jira search issues error:", error);
+          return Response.json({
+            error: "Failed to search Jira issues",
             details: error instanceof Error ? error.message : String(error)
           }, { status: 500 });
         }
@@ -1130,7 +1512,9 @@ Bun.serve({
           console.log("  Branch:", branch);
 
           if (!repo) {
-            return Response.json({ error: "Repo is required" }, { status: 400 });
+            return Response.json({
+              error: "Repository parameter is required. You must specify which repository to list. Valid options are: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, or parkhub/egds. If the user didn't specify a repo, ask them which one they want to explore."
+            }, { status: 400 });
           }
 
           // Validate allowed repos
@@ -1396,6 +1780,644 @@ Bun.serve({
       }
     },
 
+    "/api/github/pull-requests": {
+      async POST(req) {
+        try {
+          const { repo, state = 'open', limit = 10 } = await req.json();
+          console.log("\n🐙 GitHub Pull Requests Request:");
+          console.log("  Repo:", repo);
+          console.log("  State:", state);
+          console.log("  Limit:", limit);
+
+          if (!repo) {
+            return Response.json({ error: "Repo is required" }, { status: 400 });
+          }
+
+          // Validate allowed repos
+          const allowedRepos = [
+            "parkhub/smartpass-api",
+            "parkhub/graph-api",
+            "parkhub/smartpass-ui",
+            "parkhub/smartpass-admin-ui",
+            "parkhub/egds"
+          ];
+
+          if (!allowedRepos.includes(repo)) {
+            console.error("❌ Unauthorized repo:", repo);
+            return Response.json({
+              error: "Unauthorized repository",
+              allowedRepos
+            }, { status: 403 });
+          }
+
+          const githubToken = process.env.GITHUB_TOKEN;
+
+          if (!githubToken) {
+            console.error("❌ GitHub token not configured!");
+            return Response.json({ error: "GitHub not configured" }, { status: 500 });
+          }
+
+          const prUrl = `https://api.github.com/repos/${repo}/pulls?state=${state}&per_page=${Math.min(limit, 30)}`;
+          console.log("  PR URL:", prUrl);
+
+          const response = await fetch(prUrl, {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+              'Authorization': `Bearer ${githubToken}`
+            }
+          });
+
+          console.log("  Response Status:", response.status);
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error("❌ GitHub API Error:");
+            console.error("  Status:", response.status);
+            console.error("  Response:", errorText);
+            return Response.json({
+              error: `GitHub API error: ${response.status}`,
+              details: errorText
+            }, { status: response.status });
+          }
+
+          const prs = await response.json();
+          console.log("✅ Found", prs.length, "pull requests");
+
+          // Format PRs for Victor
+          const formattedPRs = prs.map((pr: any) => ({
+            number: pr.number,
+            title: pr.title,
+            state: pr.state,
+            author: pr.user?.login,
+            created: pr.created_at,
+            updated: pr.updated_at,
+            url: pr.html_url,
+            draft: pr.draft,
+            mergeable: pr.mergeable,
+            merged: pr.merged,
+            mergedAt: pr.merged_at,
+            labels: pr.labels?.map((l: any) => l.name) || [],
+            body: pr.body?.substring(0, 500) || '' // Truncate long descriptions
+          }));
+
+          formattedPRs.forEach((pr: any) => {
+            console.log("  🔀", `#${pr.number}`, "-", pr.title, `(${pr.state})`);
+          });
+
+          return Response.json({ pullRequests: formattedPRs });
+        } catch (error) {
+          console.error("❌ GitHub PRs error:", error);
+          return Response.json({
+            error: "Failed to fetch GitHub pull requests",
+            details: error instanceof Error ? error.message : String(error)
+          }, { status: 500 });
+        }
+      }
+    },
+
+    "/api/github/pull-request-details": {
+      async POST(req) {
+        try {
+          const { repo, prNumber, includeDiff = true } = await req.json();
+          console.log("\n🐙 GitHub PR Details Request:");
+          console.log("  Repo:", repo);
+          console.log("  PR Number:", prNumber);
+          console.log("  Include Diff:", includeDiff);
+
+          if (!repo || !prNumber) {
+            return Response.json({ error: "Repo and prNumber are required" }, { status: 400 });
+          }
+
+          // Validate allowed repos
+          const allowedRepos = [
+            "parkhub/smartpass-api",
+            "parkhub/graph-api",
+            "parkhub/smartpass-ui",
+            "parkhub/smartpass-admin-ui",
+            "parkhub/egds"
+          ];
+
+          if (!allowedRepos.includes(repo)) {
+            console.error("❌ Unauthorized repo:", repo);
+            return Response.json({
+              error: "Unauthorized repository",
+              allowedRepos
+            }, { status: 403 });
+          }
+
+          const githubToken = process.env.GITHUB_TOKEN;
+
+          if (!githubToken) {
+            console.error("❌ GitHub token not configured!");
+            return Response.json({ error: "GitHub not configured" }, { status: 500 });
+          }
+
+          // Fetch PR details
+          const prUrl = `https://api.github.com/repos/${repo}/pulls/${prNumber}`;
+          console.log("  PR URL:", prUrl);
+
+          const prResponse = await fetch(prUrl, {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+              'Authorization': `Bearer ${githubToken}`
+            }
+          });
+
+          console.log("  PR Response Status:", prResponse.status);
+
+          if (!prResponse.ok) {
+            const errorText = await prResponse.text();
+            console.error("❌ GitHub API Error:");
+            console.error("  Status:", prResponse.status);
+            console.error("  Response:", errorText);
+            return Response.json({
+              error: `GitHub API error: ${prResponse.status}`,
+              details: errorText
+            }, { status: prResponse.status });
+          }
+
+          const pr = await prResponse.json();
+          console.log("✅ Fetched PR:", pr.title);
+
+          // Fetch PR files/changes
+          const filesUrl = `https://api.github.com/repos/${repo}/pulls/${prNumber}/files`;
+          console.log("  Files URL:", filesUrl);
+
+          const filesResponse = await fetch(filesUrl, {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+              'Authorization': `Bearer ${githubToken}`
+            }
+          });
+
+          if (!filesResponse.ok) {
+            console.error("❌ Failed to fetch PR files");
+          }
+
+          const files = filesResponse.ok ? await filesResponse.json() : [];
+          console.log("✅ Found", files.length, "changed files");
+
+          // Fetch check runs for the PR's head commit
+          const checksUrl = `https://api.github.com/repos/${repo}/commits/${pr.head.sha}/check-runs`;
+          console.log("  Checks URL:", checksUrl);
+
+          const checksResponse = await fetch(checksUrl, {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+              'Authorization': `Bearer ${githubToken}`
+            }
+          });
+
+          let checkRuns = [];
+          if (checksResponse.ok) {
+            const checksData = await checksResponse.json();
+            checkRuns = checksData.check_runs || [];
+            console.log("✅ Found", checkRuns.length, "check runs");
+          } else {
+            console.error("❌ Failed to fetch check runs");
+          }
+
+          // Fetch commit status (for non-Actions checks)
+          const statusUrl = `https://api.github.com/repos/${repo}/commits/${pr.head.sha}/status`;
+          console.log("  Status URL:", statusUrl);
+
+          const statusResponse = await fetch(statusUrl, {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+              'Authorization': `Bearer ${githubToken}`
+            }
+          });
+
+          let commitStatus = null;
+          if (statusResponse.ok) {
+            commitStatus = await statusResponse.json();
+            console.log("✅ Fetched commit status:", commitStatus.state);
+          } else {
+            console.error("❌ Failed to fetch commit status");
+          }
+
+          // Format the response
+          const formattedPR = {
+            number: pr.number,
+            title: pr.title,
+            state: pr.state,
+            author: pr.user?.login,
+            created: pr.created_at,
+            updated: pr.updated_at,
+            merged: pr.merged,
+            mergedAt: pr.merged_at,
+            mergedBy: pr.merged_by?.login,
+            url: pr.html_url,
+            body: pr.body || '',
+            draft: pr.draft,
+            labels: pr.labels?.map((l: any) => l.name) || [],
+            additions: pr.additions,
+            deletions: pr.deletions,
+            changedFiles: pr.changed_files,
+            commits: pr.commits,
+            headSha: pr.head.sha,
+            headRef: pr.head.ref,
+            baseRef: pr.base.ref,
+            mergeable: pr.mergeable,
+            mergeableState: pr.mergeable_state,
+            checks: {
+              overallStatus: commitStatus?.state || 'unknown',
+              checkRuns: checkRuns.map((check: any) => ({
+                name: check.name,
+                status: check.status,
+                conclusion: check.conclusion,
+                startedAt: check.started_at,
+                completedAt: check.completed_at,
+                url: check.html_url,
+                app: check.app?.name
+              })),
+              statusChecks: commitStatus?.statuses?.map((status: any) => ({
+                context: status.context,
+                state: status.state,
+                description: status.description,
+                url: status.target_url
+              })) || []
+            },
+            files: files.map((file: any) => ({
+              filename: file.filename,
+              status: file.status,
+              additions: file.additions,
+              deletions: file.deletions,
+              changes: file.changes,
+              patch: includeDiff ? file.patch : undefined
+            }))
+          };
+
+          return Response.json({ pullRequest: formattedPR });
+        } catch (error) {
+          console.error("❌ GitHub PR details error:", error);
+          return Response.json({
+            error: "Failed to fetch GitHub PR details",
+            details: error instanceof Error ? error.message : String(error)
+          }, { status: 500 });
+        }
+      }
+    },
+
+    "/api/github/trigger-workflow": {
+      async POST(req) {
+        try {
+          const { repo, workflowId, ref = 'main', inputs = {} } = await req.json();
+          console.log("\n🐙 GitHub Trigger Workflow Request:");
+          console.log("  Repo:", repo);
+          console.log("  Workflow ID:", workflowId);
+          console.log("  Ref:", ref);
+          console.log("  Inputs:", inputs);
+
+          if (!repo || !workflowId) {
+            return Response.json({ error: "Repo and workflowId are required" }, { status: 400 });
+          }
+
+          // Validate allowed repos
+          const allowedRepos = [
+            "parkhub/smartpass-api",
+            "parkhub/graph-api",
+            "parkhub/smartpass-ui",
+            "parkhub/smartpass-admin-ui",
+            "parkhub/egds"
+          ];
+
+          if (!allowedRepos.includes(repo)) {
+            console.error("❌ Unauthorized repo:", repo);
+            return Response.json({
+              error: "Unauthorized repository",
+              allowedRepos
+            }, { status: 403 });
+          }
+
+          const githubToken = process.env.GITHUB_TOKEN;
+
+          if (!githubToken) {
+            console.error("❌ GitHub token not configured!");
+            return Response.json({ error: "GitHub not configured" }, { status: 500 });
+          }
+
+          const dispatchUrl = `https://api.github.com/repos/${repo}/actions/workflows/${workflowId}/dispatches`;
+          console.log("  Dispatch URL:", dispatchUrl);
+
+          const response = await fetch(dispatchUrl, {
+            method: 'POST',
+            headers: {
+              'Accept': 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+              'Authorization': `Bearer ${githubToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              ref,
+              inputs
+            })
+          });
+
+          console.log("  Response Status:", response.status);
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error("❌ GitHub API Error:");
+            console.error("  Status:", response.status);
+            console.error("  Response:", errorText);
+            return Response.json({
+              error: `GitHub API error: ${response.status}`,
+              details: errorText
+            }, { status: response.status });
+          }
+
+          console.log("✅ Workflow triggered successfully");
+
+          return Response.json({
+            success: true,
+            message: `Workflow '${workflowId}' triggered successfully on ${ref}`,
+            repo,
+            workflowId,
+            ref
+          });
+        } catch (error) {
+          console.error("❌ GitHub trigger workflow error:", error);
+          return Response.json({
+            error: "Failed to trigger GitHub workflow",
+            details: error instanceof Error ? error.message : String(error)
+          }, { status: 500 });
+        }
+      }
+    },
+
+    "/api/github/rerun-workflow": {
+      async POST(req) {
+        try {
+          const { repo, runId, failedJobsOnly = false } = await req.json();
+          console.log("\n🐙 GitHub Re-run Workflow Request:");
+          console.log("  Repo:", repo);
+          console.log("  Run ID:", runId);
+          console.log("  Failed Jobs Only:", failedJobsOnly);
+
+          if (!repo || !runId) {
+            return Response.json({ error: "Repo and runId are required" }, { status: 400 });
+          }
+
+          // Validate allowed repos
+          const allowedRepos = [
+            "parkhub/smartpass-api",
+            "parkhub/graph-api",
+            "parkhub/smartpass-ui",
+            "parkhub/smartpass-admin-ui",
+            "parkhub/egds"
+          ];
+
+          if (!allowedRepos.includes(repo)) {
+            console.error("❌ Unauthorized repo:", repo);
+            return Response.json({
+              error: "Unauthorized repository",
+              allowedRepos
+            }, { status: 403 });
+          }
+
+          const githubToken = process.env.GITHUB_TOKEN;
+
+          if (!githubToken) {
+            console.error("❌ GitHub token not configured!");
+            return Response.json({ error: "GitHub not configured" }, { status: 500 });
+          }
+
+          const endpoint = failedJobsOnly ? 'rerun-failed-jobs' : 'rerun';
+          const rerunUrl = `https://api.github.com/repos/${repo}/actions/runs/${runId}/${endpoint}`;
+          console.log("  Re-run URL:", rerunUrl);
+
+          const response = await fetch(rerunUrl, {
+            method: 'POST',
+            headers: {
+              'Accept': 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+              'Authorization': `Bearer ${githubToken}`
+            }
+          });
+
+          console.log("  Response Status:", response.status);
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error("❌ GitHub API Error:");
+            console.error("  Status:", response.status);
+            console.error("  Response:", errorText);
+            return Response.json({
+              error: `GitHub API error: ${response.status}`,
+              details: errorText
+            }, { status: response.status });
+          }
+
+          console.log("✅ Workflow re-run triggered successfully");
+
+          return Response.json({
+            success: true,
+            message: failedJobsOnly
+              ? `Failed jobs re-run triggered for workflow run ${runId}`
+              : `Workflow run ${runId} re-run triggered successfully`,
+            repo,
+            runId,
+            failedJobsOnly
+          });
+        } catch (error) {
+          console.error("❌ GitHub rerun workflow error:", error);
+          return Response.json({
+            error: "Failed to re-run GitHub workflow",
+            details: error instanceof Error ? error.message : String(error)
+          }, { status: 500 });
+        }
+      }
+    },
+
+    "/api/github/create-pr": {
+      async POST(req) {
+        try {
+          const { repo, branch, files, title, body, commitMessage, base = "main" } = await req.json();
+          console.log("\n🐙 GitHub Create PR Request:");
+          console.log("  Repo:", repo);
+          console.log("  Branch:", branch);
+          console.log("  Base:", base);
+          console.log("  Files:", files?.length);
+          console.log("  Title:", title);
+
+          if (!repo || !branch || !files || !title || !commitMessage) {
+            return Response.json({
+              error: "Repo, branch, files, title, and commitMessage are required"
+            }, { status: 400 });
+          }
+
+          // Validate allowed repos
+          const allowedRepos = [
+            "parkhub/smartpass-api",
+            "parkhub/graph-api",
+            "parkhub/smartpass-ui",
+            "parkhub/smartpass-admin-ui",
+            "parkhub/egds"
+          ];
+
+          if (!allowedRepos.includes(repo)) {
+            console.error("❌ Unauthorized repo:", repo);
+            return Response.json({
+              error: "Unauthorized repository",
+              allowedRepos
+            }, { status: 403 });
+          }
+
+          const githubToken = process.env.GITHUB_TOKEN;
+
+          if (!githubToken) {
+            console.error("❌ GitHub token not configured!");
+            return Response.json({ error: "GitHub not configured" }, { status: 500 });
+          }
+
+          const headers = {
+            'Accept': 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+            'Authorization': `Bearer ${githubToken}`
+          };
+
+          // 1. Get the base branch reference to get the latest commit SHA
+          console.log("  Step 1: Getting base branch reference...");
+          const baseRefUrl = `https://api.github.com/repos/${repo}/git/refs/heads/${base}`;
+          const baseRefResponse = await fetch(baseRefUrl, { headers });
+
+          if (!baseRefResponse.ok) {
+            const errorText = await baseRefResponse.text();
+            console.error("❌ Failed to get base branch:", errorText);
+            return Response.json({
+              error: `Failed to get base branch: ${baseRefResponse.status}`,
+              details: errorText
+            }, { status: baseRefResponse.status });
+          }
+
+          const baseRef = await baseRefResponse.json();
+          const baseSha = baseRef.object.sha;
+          console.log("  Base SHA:", baseSha);
+
+          // 2. Create a new branch
+          console.log("  Step 2: Creating new branch...");
+          const createBranchUrl = `https://api.github.com/repos/${repo}/git/refs`;
+          const createBranchResponse = await fetch(createBranchUrl, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              ref: `refs/heads/${branch}`,
+              sha: baseSha
+            })
+          });
+
+          if (!createBranchResponse.ok) {
+            const errorText = await createBranchResponse.text();
+            console.error("❌ Failed to create branch:", errorText);
+            return Response.json({
+              error: `Failed to create branch: ${createBranchResponse.status}`,
+              details: errorText
+            }, { status: createBranchResponse.status });
+          }
+
+          console.log("  ✅ Branch created:", branch);
+
+          // 3. Create/update files on the new branch
+          console.log("  Step 3: Updating files...");
+          for (const file of files) {
+            console.log("    Updating:", file.path);
+
+            // Check if file exists to get its SHA
+            const fileUrl = `https://api.github.com/repos/${repo}/contents/${file.path}?ref=${branch}`;
+            const fileResponse = await fetch(fileUrl, { headers });
+
+            let fileSha = null;
+            if (fileResponse.ok) {
+              const fileData = await fileResponse.json();
+              fileSha = fileData.sha;
+              console.log("      File exists, SHA:", fileSha);
+            } else {
+              console.log("      New file");
+            }
+
+            // Update or create the file
+            const updateFileUrl = `https://api.github.com/repos/${repo}/contents/${file.path}`;
+            const updateFileResponse = await fetch(updateFileUrl, {
+              method: 'PUT',
+              headers,
+              body: JSON.stringify({
+                message: commitMessage,
+                content: Buffer.from(file.content).toString('base64'),
+                branch: branch,
+                ...(fileSha && { sha: fileSha })
+              })
+            });
+
+            if (!updateFileResponse.ok) {
+              const errorText = await updateFileResponse.text();
+              console.error("❌ Failed to update file:", file.path, errorText);
+              return Response.json({
+                error: `Failed to update file ${file.path}: ${updateFileResponse.status}`,
+                details: errorText
+              }, { status: updateFileResponse.status });
+            }
+
+            console.log("      ✅ Updated");
+          }
+
+          // 4. Create the pull request
+          console.log("  Step 4: Creating pull request...");
+          const createPRUrl = `https://api.github.com/repos/${repo}/pulls`;
+          const createPRResponse = await fetch(createPRUrl, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              title,
+              body: body || "",
+              head: branch,
+              base: base
+            })
+          });
+
+          if (!createPRResponse.ok) {
+            const errorText = await createPRResponse.text();
+            console.error("❌ Failed to create PR:", errorText);
+            return Response.json({
+              error: `Failed to create PR: ${createPRResponse.status}`,
+              details: errorText
+            }, { status: createPRResponse.status });
+          }
+
+          const pr = await createPRResponse.json();
+          console.log("  ✅ PR created:", pr.html_url);
+
+          return Response.json({
+            success: true,
+            message: "Pull request created successfully",
+            pr: {
+              number: pr.number,
+              title: pr.title,
+              url: pr.html_url,
+              branch: branch,
+              base: base
+            }
+          });
+        } catch (error) {
+          console.error("❌ GitHub create PR error:", error);
+          return Response.json({
+            error: "Failed to create GitHub pull request",
+            details: error instanceof Error ? error.message : String(error)
+          }, { status: 500 });
+        }
+      }
+    },
+
     "/api/submit": {
       POST: async (req) => {
         try {
@@ -1413,12 +2435,26 @@ Bun.serve({
             { role: "user", content: message }
           ];
 
-          const response = await anthropic.messages.create({
+          const response = await anthropic.beta.messages.create({
             model: "claude-sonnet-4-5-20250929",
             max_tokens: 8192,
+            betas: ["advanced-tool-use-2025-11-20"],
             system: victorSystemPrompt,
             messages,
             tools: [
+              {
+                type: "tool_search_tool_bm25_20251119",
+                name: "tool_search_tool_bm25"
+              },
+              {
+                name: "list_confluence_root",
+                description: "List all root-level pages and folders in the FRONTIER Confluence space. Use this FIRST when users ask general questions about Confluence documentation to see what folders/sections exist. This helps you browse the structure before searching.",
+                input_schema: {
+                  type: "object",
+                  properties: {},
+                  required: []
+                }
+              },
               {
                 name: "search_confluence",
                 description: "Search the team's Confluence knowledge base for documentation, guides, and information. Use this when the user asks about team processes, documentation, or you need to look up specific information.",
@@ -1459,21 +2495,22 @@ Bun.serve({
                     }
                   },
                   required: ["pageId"]
-                }
+                },
+                defer_loading: true
               },
               {
                 name: "create_confluence_page",
-                description: "Create a new Confluence page in the FRONTIER space. Use this when users ask you to document something, create meeting notes, write up architecture decisions, or create any new documentation.",
+                description: "Create a new Confluence page in the FRONTIER space. IMPORTANT: You MUST provide BOTH title and content - you cannot create an empty page. If the user hasn't specified what content to include, either ask them or write appropriate content based on context.",
                 input_schema: {
                   type: "object",
                   properties: {
                     title: {
                       type: "string",
-                      description: "The title of the new page"
+                      description: "The title of the new page (REQUIRED)"
                     },
                     content: {
                       type: "string",
-                      description: "The page content in HTML format. Use proper HTML tags like <h1>, <h2>, <p>, <ul>, <li>, <code>, <pre>, etc. for formatting."
+                      description: "The page content in Confluence storage format - simple XHTML (REQUIRED - cannot be empty). Use: <h1>, <h2>, <h3>, <p>, <ul><li>, <ol><li>, <strong>, <em>, <code>, <pre><code>. NEVER use markdown (no #, ##, *, **, ```). Example: '<h1>Title</h1><p>Content here</p><ul><li>Item</li></ul>'. Must contain actual content."
                     },
                     parentPageId: {
                       type: "string",
@@ -1481,7 +2518,8 @@ Bun.serve({
                     }
                   },
                   required: ["title", "content"]
-                }
+                },
+                defer_loading: true
               },
               {
                 name: "update_confluence_page",
@@ -1495,7 +2533,7 @@ Bun.serve({
                     },
                     content: {
                       type: "string",
-                      description: "The new page content in HTML format. This will replace the existing content."
+                      description: "The new page content in Confluence storage format (XHTML-based). Use tags like <h1>, <h2>, <p>, <ul>, <li>, <code>, <strong>, <em>. Do NOT use markdown syntax (no #, *, **, ```). This will replace the existing content."
                     },
                     title: {
                       type: "string",
@@ -1503,7 +2541,8 @@ Bun.serve({
                     }
                   },
                   required: ["pageId", "content"]
-                }
+                },
+                defer_loading: true
               },
               {
                 name: "create_confluence_folder",
@@ -1521,7 +2560,8 @@ Bun.serve({
                     }
                   },
                   required: ["title"]
-                }
+                },
+                defer_loading: true
               },
               {
                 name: "get_api_documentation",
@@ -1535,7 +2575,8 @@ Bun.serve({
                     }
                   },
                   required: []
-                }
+                },
+                defer_loading: true
               },
               {
                 name: "get_github_releases",
@@ -1554,7 +2595,8 @@ Bun.serve({
                     }
                   },
                   required: ["repo"]
-                }
+                },
+                defer_loading: true
               },
               {
                 name: "read_github_file",
@@ -1577,17 +2619,18 @@ Bun.serve({
                     }
                   },
                   required: ["repo", "path"]
-                }
+                },
+                defer_loading: true
               },
               {
                 name: "list_github_directory",
-                description: "List files and directories in a GitHub repository. Use this to explore repo structure, browse folders, or find files.",
+                description: "List files and directories in a specific GitHub repository. IMPORTANT: You must always specify which repository to list. If the user doesn't specify a repo, ask them which one they want to explore, or if the context is clear (e.g., they're asking about the API), use the appropriate repo.",
                 input_schema: {
                   type: "object",
                   properties: {
                     repo: {
                       type: "string",
-                      description: "The repository name in format 'owner/repo'. Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds",
+                      description: "REQUIRED: The repository name in format 'owner/repo'. Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds",
                       enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds"]
                     },
                     path: {
@@ -1600,7 +2643,8 @@ Bun.serve({
                     }
                   },
                   required: ["repo"]
-                }
+                },
+                defer_loading: true
               },
               {
                 name: "search_github_code",
@@ -1619,7 +2663,197 @@ Bun.serve({
                     }
                   },
                   required: ["query"]
-                }
+                },
+                defer_loading: true
+              },
+              {
+                name: "list_github_pull_requests",
+                description: "List pull requests from Frontier GitHub repositories. Use this when users ask about PRs, want to see open/closed PRs, or check PR status.",
+                input_schema: {
+                  type: "object",
+                  properties: {
+                    repo: {
+                      type: "string",
+                      description: "The repository name in format 'owner/repo'. Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds",
+                      enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds"]
+                    },
+                    state: {
+                      type: "string",
+                      description: "Filter by PR state: 'open', 'closed', or 'all' (default: 'open')",
+                      enum: ["open", "closed", "all"]
+                    },
+                    limit: {
+                      type: "number",
+                      description: "Number of PRs to fetch (default: 10, max: 30)"
+                    }
+                  },
+                  required: ["repo"]
+                },
+                defer_loading: true
+              },
+              {
+                name: "get_github_pull_request",
+                description: "Get detailed information about a specific GitHub pull request including description, changes, diff, and CI/CD status (GitHub Actions, tests, builds). Use this when users provide a PR URL like 'https://github.com/parkhub/graph-api/pull/1056' or ask about checks/tests. Extract the repo as 'parkhub/graph-api' (combined owner/repo) and the PR number as 1056.",
+                input_schema: {
+                  type: "object",
+                  properties: {
+                    repo: {
+                      type: "string",
+                      description: "The FULL repository name in format 'owner/repo' (e.g., 'parkhub/graph-api', NOT just 'graph-api'). Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds",
+                      enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds"]
+                    },
+                    prNumber: {
+                      type: "number",
+                      description: "The pull request number (e.g., 1056 from the URL https://github.com/parkhub/graph-api/pull/1056)"
+                    },
+                    includeDiff: {
+                      type: "boolean",
+                      description: "Whether to include the full diff of changes (default: true)"
+                    }
+                  },
+                  required: ["repo", "prNumber"]
+                },
+                defer_loading: true
+              },
+              {
+                name: "trigger_github_workflow",
+                description: "Trigger a GitHub Actions workflow run. Use this when users ask to run a workflow, trigger a deployment, re-run tests, or start a CI/CD job. IMPORTANT: Ask the user for confirmation before triggering workflows.",
+                input_schema: {
+                  type: "object",
+                  properties: {
+                    repo: {
+                      type: "string",
+                      description: "The FULL repository name in format 'owner/repo' (e.g., 'parkhub/graph-api'). Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds",
+                      enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds"]
+                    },
+                    workflowId: {
+                      type: "string",
+                      description: "The workflow file name (e.g., 'ci.yml', 'deploy.yml') or workflow ID number"
+                    },
+                    ref: {
+                      type: "string",
+                      description: "The git reference (branch/tag) to run the workflow on (default: 'main')"
+                    },
+                    inputs: {
+                      type: "object",
+                      description: "Optional inputs for the workflow (if it accepts workflow_dispatch inputs)"
+                    }
+                  },
+                  required: ["repo", "workflowId"]
+                },
+                defer_loading: true
+              },
+              {
+                name: "rerun_github_workflow",
+                description: "Re-run a failed GitHub Actions workflow run. Use this when users ask to re-run failed checks, retry a failed build, or restart failed tests on a PR.",
+                input_schema: {
+                  type: "object",
+                  properties: {
+                    repo: {
+                      type: "string",
+                      description: "The FULL repository name in format 'owner/repo' (e.g., 'parkhub/graph-api'). Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds",
+                      enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds"]
+                    },
+                    runId: {
+                      type: "number",
+                      description: "The workflow run ID to re-run (get this from check runs in the PR details)"
+                    },
+                    failedJobsOnly: {
+                      type: "boolean",
+                      description: "Whether to re-run only failed jobs (true) or all jobs (false). Default: false"
+                    }
+                  },
+                  required: ["repo", "runId"]
+                },
+                defer_loading: true
+              },
+              {
+                name: "create_github_pull_request",
+                description: "Create a new GitHub pull request with code changes. Use this when users ask you to make code changes, fix bugs, add features, or update files. This will create a new branch, commit the changes, and open a PR.",
+                input_schema: {
+                  type: "object",
+                  properties: {
+                    repo: {
+                      type: "string",
+                      description: "The repository name in format 'owner/repo'. Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds",
+                      enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds"]
+                    },
+                    branch: {
+                      type: "string",
+                      description: "The branch name for the PR (e.g., 'fix/auth-bug', 'feature/dark-mode'). Use descriptive names with prefixes like fix/, feature/, chore/"
+                    },
+                    files: {
+                      type: "array",
+                      description: "Array of files to create or update. Each file object must have 'path' (relative to repo root) and 'content' (full file content as string)",
+                      items: {
+                        type: "object",
+                        properties: {
+                          path: {
+                            type: "string",
+                            description: "File path relative to repo root (e.g., 'src/auth.ts', 'README.md')"
+                          },
+                          content: {
+                            type: "string",
+                            description: "Complete file content as a string"
+                          }
+                        },
+                        required: ["path", "content"]
+                      }
+                    },
+                    title: {
+                      type: "string",
+                      description: "Clear, concise PR title that describes the changes"
+                    },
+                    body: {
+                      type: "string",
+                      description: "Detailed PR description including context, changes made, testing instructions, and any related ticket numbers"
+                    },
+                    commitMessage: {
+                      type: "string",
+                      description: "Commit message that explains what and why"
+                    },
+                    base: {
+                      type: "string",
+                      description: "Base branch to merge into (default: 'main')"
+                    }
+                  },
+                  required: ["repo", "branch", "files", "title", "commitMessage"]
+                },
+                defer_loading: true
+              },
+              {
+                name: "get_jira_issue",
+                description: "Get details of a specific Jira ticket by its key (e.g., PV-123). Use this when users ask about a specific ticket, want to check ticket status, or reference a ticket number.",
+                input_schema: {
+                  type: "object",
+                  properties: {
+                    issueKey: {
+                      type: "string",
+                      description: "The Jira issue key (e.g., 'PV-123', 'PV-456')"
+                    }
+                  },
+                  required: ["issueKey"]
+                },
+                defer_loading: true
+              },
+              {
+                name: "search_jira_issues",
+                description: "Search for Jira tickets in the PV (Frontier) project by keywords. Use this when users ask to find tickets, search for work items, or look up tickets by topic (e.g., 'find tickets about authentication', 'search for API bugs').",
+                input_schema: {
+                  type: "object",
+                  properties: {
+                    query: {
+                      type: "string",
+                      description: "Search keywords to find in ticket summaries and descriptions"
+                    },
+                    maxResults: {
+                      type: "number",
+                      description: "Maximum number of results to return (default: 10, max: 50)"
+                    }
+                  },
+                  required: ["query"]
+                },
+                defer_loading: true
               },
               {
                 name: "create_jira_issue",
@@ -1652,7 +2886,8 @@ Bun.serve({
                     }
                   },
                   required: ["summary"]
-                }
+                },
+                defer_loading: true
               }
             ]
           });
@@ -1685,7 +2920,21 @@ Bun.serve({
               let toolResult;
 
               // Execute the tool
-              if (toolUseBlock.name === "search_confluence") {
+              if (toolUseBlock.name === "list_confluence_root") {
+              console.log("  → Calling list_confluence_root");
+              const listRootRes = await fetch("http://localhost:3000/api/confluence/list-root", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({})
+              });
+
+              if (!listRootRes.ok) {
+                console.error("  ❌ Tool call failed with status:", listRootRes.status);
+              }
+
+              toolResult = await listRootRes.json();
+              console.log("  ✅ Tool result:", toolResult);
+            } else if (toolUseBlock.name === "search_confluence") {
               console.log("  → Calling search_confluence with query:", toolUseBlock.input.query);
               const searchRes = await fetch("http://localhost:3000/api/confluence/search", {
                 method: "POST",
@@ -1805,6 +3054,42 @@ Bun.serve({
 
               toolResult = await releasesRes.json();
               console.log("    ✅ Tool result received");
+            } else if (toolUseBlock.name === "get_jira_issue") {
+              console.log("  → Calling get_jira_issue");
+              console.log("    Issue Key:", toolUseBlock.input.issueKey);
+              const getIssueRes = await fetch("http://localhost:3000/api/jira/get-issue", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  issueKey: toolUseBlock.input.issueKey
+                })
+              });
+
+              if (!getIssueRes.ok) {
+                console.error("  ❌ Tool call failed with status:", getIssueRes.status);
+              }
+
+              toolResult = await getIssueRes.json();
+              console.log("    ✅ Tool result received");
+            } else if (toolUseBlock.name === "search_jira_issues") {
+              console.log("  → Calling search_jira_issues");
+              console.log("    Query:", toolUseBlock.input.query);
+              console.log("    Max Results:", toolUseBlock.input.maxResults || 10);
+              const searchIssuesRes = await fetch("http://localhost:3000/api/jira/search-issues", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  query: toolUseBlock.input.query,
+                  maxResults: toolUseBlock.input.maxResults
+                })
+              });
+
+              if (!searchIssuesRes.ok) {
+                console.error("  ❌ Tool call failed with status:", searchIssuesRes.status);
+              }
+
+              toolResult = await searchIssuesRes.json();
+              console.log("    ✅ Tool result received");
             } else if (toolUseBlock.name === "create_jira_issue") {
               console.log("  → Calling create_jira_issue");
               console.log("    Summary:", toolUseBlock.input.summary);
@@ -1890,6 +3175,117 @@ Bun.serve({
 
               toolResult = await searchCodeRes.json();
               console.log("    ✅ Tool result received");
+            } else if (toolUseBlock.name === "list_github_pull_requests") {
+              console.log("  → Calling list_github_pull_requests");
+              console.log("    Repo:", toolUseBlock.input.repo);
+              console.log("    State:", toolUseBlock.input.state || "open");
+              console.log("    Limit:", toolUseBlock.input.limit || 10);
+              const prRes = await fetch("http://localhost:3000/api/github/pull-requests", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  repo: toolUseBlock.input.repo,
+                  state: toolUseBlock.input.state,
+                  limit: toolUseBlock.input.limit
+                })
+              });
+
+              if (!prRes.ok) {
+                console.error("  ❌ Tool call failed with status:", prRes.status);
+              }
+
+              toolResult = await prRes.json();
+              console.log("    ✅ Tool result received");
+            } else if (toolUseBlock.name === "get_github_pull_request") {
+              console.log("  → Calling get_github_pull_request");
+              console.log("    Repo:", toolUseBlock.input.repo);
+              console.log("    PR Number:", toolUseBlock.input.prNumber);
+              console.log("    Include Diff:", toolUseBlock.input.includeDiff !== false);
+              const prDetailsRes = await fetch("http://localhost:3000/api/github/pull-request-details", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  repo: toolUseBlock.input.repo,
+                  prNumber: toolUseBlock.input.prNumber,
+                  includeDiff: toolUseBlock.input.includeDiff
+                })
+              });
+
+              if (!prDetailsRes.ok) {
+                console.error("  ❌ Tool call failed with status:", prDetailsRes.status);
+              }
+
+              toolResult = await prDetailsRes.json();
+              console.log("    ✅ Tool result received");
+            } else if (toolUseBlock.name === "trigger_github_workflow") {
+              console.log("  → Calling trigger_github_workflow");
+              console.log("    Repo:", toolUseBlock.input.repo);
+              console.log("    Workflow ID:", toolUseBlock.input.workflowId);
+              console.log("    Ref:", toolUseBlock.input.ref || "main");
+              const triggerRes = await fetch("http://localhost:3000/api/github/trigger-workflow", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  repo: toolUseBlock.input.repo,
+                  workflowId: toolUseBlock.input.workflowId,
+                  ref: toolUseBlock.input.ref,
+                  inputs: toolUseBlock.input.inputs
+                })
+              });
+
+              if (!triggerRes.ok) {
+                console.error("  ❌ Tool call failed with status:", triggerRes.status);
+              }
+
+              toolResult = await triggerRes.json();
+              console.log("    ✅ Tool result received");
+            } else if (toolUseBlock.name === "rerun_github_workflow") {
+              console.log("  → Calling rerun_github_workflow");
+              console.log("    Repo:", toolUseBlock.input.repo);
+              console.log("    Run ID:", toolUseBlock.input.runId);
+              console.log("    Failed Jobs Only:", toolUseBlock.input.failedJobsOnly || false);
+              const rerunRes = await fetch("http://localhost:3000/api/github/rerun-workflow", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  repo: toolUseBlock.input.repo,
+                  runId: toolUseBlock.input.runId,
+                  failedJobsOnly: toolUseBlock.input.failedJobsOnly
+                })
+              });
+
+              if (!rerunRes.ok) {
+                console.error("  ❌ Tool call failed with status:", rerunRes.status);
+              }
+
+              toolResult = await rerunRes.json();
+              console.log("    ✅ Tool result received");
+            } else if (toolUseBlock.name === "create_github_pull_request") {
+              console.log("  → Calling create_github_pull_request");
+              console.log("    Repo:", toolUseBlock.input.repo);
+              console.log("    Branch:", toolUseBlock.input.branch);
+              console.log("    Files:", toolUseBlock.input.files?.length);
+              console.log("    Title:", toolUseBlock.input.title);
+              const createPRRes = await fetch("http://localhost:3000/api/github/create-pr", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  repo: toolUseBlock.input.repo,
+                  branch: toolUseBlock.input.branch,
+                  files: toolUseBlock.input.files,
+                  title: toolUseBlock.input.title,
+                  body: toolUseBlock.input.body,
+                  commitMessage: toolUseBlock.input.commitMessage,
+                  base: toolUseBlock.input.base
+                })
+              });
+
+              if (!createPRRes.ok) {
+                console.error("  ❌ Tool call failed with status:", createPRRes.status);
+              }
+
+              toolResult = await createPRRes.json();
+              console.log("    ✅ Tool result received");
             } else if (toolUseBlock.name === "get_api_documentation") {
               console.log("  → Calling get_api_documentation");
               console.log("    Endpoint filter:", toolUseBlock.input.endpoint || "all");
@@ -1951,12 +3347,26 @@ Bun.serve({
             console.log("  📊 Total messages in history:", finalMessages.length);
 
             // Continue conversation with tool result
-            finalResponse = await anthropic.messages.create({
+            finalResponse = await anthropic.beta.messages.create({
               model: "claude-sonnet-4-5-20250929",
               max_tokens: 8192,
+              betas: ["advanced-tool-use-2025-11-20"],
               system: victorSystemPrompt,
               messages: finalMessages,
               tools: [
+                {
+                  type: "tool_search_tool_bm25_20251119",
+                  name: "tool_search_tool_bm25"
+                },
+                {
+                  name: "list_confluence_root",
+                  description: "List all root-level pages and folders in the FRONTIER Confluence space. Use this FIRST when users ask general questions about Confluence documentation to see what folders/sections exist. This helps you browse the structure before searching.",
+                  input_schema: {
+                    type: "object",
+                    properties: {},
+                    required: []
+                  }
+                },
                 {
                   name: "search_confluence",
                   description: "Search the team's Confluence knowledge base for documentation, guides, and information. Use this when the user asks about team processes, documentation, or you need to look up specific information.",
@@ -1997,21 +3407,22 @@ Bun.serve({
                       }
                     },
                     required: ["pageId"]
-                  }
+                  },
+                  defer_loading: true
                 },
                 {
                   name: "create_confluence_page",
-                  description: "Create a new Confluence page in the FRONTIER space. Use this when users ask you to document something, create meeting notes, write up architecture decisions, or create any new documentation.",
+                  description: "Create a new Confluence page in the FRONTIER space. IMPORTANT: You MUST provide BOTH title and content - you cannot create an empty page. If the user hasn't specified what content to include, either ask them or write appropriate content based on context.",
                   input_schema: {
                     type: "object",
                     properties: {
                       title: {
                         type: "string",
-                        description: "The title of the new page"
+                        description: "The title of the new page (REQUIRED)"
                       },
                       content: {
                         type: "string",
-                        description: "The page content in HTML format. Use proper HTML tags like <h1>, <h2>, <p>, <ul>, <li>, <code>, <pre>, etc. for formatting."
+                        description: "The page content in Confluence storage format (XHTML-based) (REQUIRED - cannot be empty). Use tags like <h1>, <h2>, <p>, <ul>, <li>, <code>, <strong>, <em>, etc. Do NOT use markdown syntax (no #, *, **, ```). For code blocks use <ac:structured-macro>. Must contain at least some basic content."
                       },
                       parentPageId: {
                         type: "string",
@@ -2019,7 +3430,8 @@ Bun.serve({
                       }
                     },
                     required: ["title", "content"]
-                  }
+                  },
+                  defer_loading: true
                 },
                 {
                   name: "update_confluence_page",
@@ -2033,7 +3445,7 @@ Bun.serve({
                       },
                       content: {
                         type: "string",
-                        description: "The new page content in HTML format. This will replace the existing content."
+                        description: "The new page content in Confluence storage format (XHTML-based). Use tags like <h1>, <h2>, <p>, <ul>, <li>, <code>, <strong>, <em>. Do NOT use markdown syntax (no #, *, **, ```). This will replace the existing content."
                       },
                       title: {
                         type: "string",
@@ -2041,7 +3453,8 @@ Bun.serve({
                       }
                     },
                     required: ["pageId", "content"]
-                  }
+                  },
+                  defer_loading: true
                 },
                 {
                   name: "create_confluence_folder",
@@ -2059,7 +3472,8 @@ Bun.serve({
                       }
                     },
                     required: ["title"]
-                  }
+                  },
+                  defer_loading: true
                 },
                 {
                   name: "get_api_documentation",
@@ -2073,7 +3487,8 @@ Bun.serve({
                       }
                     },
                     required: []
-                  }
+                  },
+                  defer_loading: true
                 },
                 {
                   name: "get_github_releases",
@@ -2092,7 +3507,8 @@ Bun.serve({
                       }
                     },
                     required: ["repo"]
-                  }
+                  },
+                  defer_loading: true
                 },
                 {
                   name: "read_github_file",
@@ -2115,17 +3531,18 @@ Bun.serve({
                       }
                     },
                     required: ["repo", "path"]
-                  }
+                  },
+                  defer_loading: true
                 },
                 {
                   name: "list_github_directory",
-                  description: "List files and directories in a GitHub repository. Use this to explore repo structure, browse folders, or find files.",
+                  description: "List files and directories in a specific GitHub repository. IMPORTANT: You must always specify which repository to list. If the user doesn't specify a repo, ask them which one they want to explore, or if the context is clear (e.g., they're asking about the API), use the appropriate repo.",
                   input_schema: {
                     type: "object",
                     properties: {
                       repo: {
                         type: "string",
-                        description: "The repository name in format 'owner/repo'. Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds",
+                        description: "REQUIRED: The repository name in format 'owner/repo'. Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds",
                         enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds"]
                       },
                       path: {
@@ -2138,7 +3555,8 @@ Bun.serve({
                       }
                     },
                     required: ["repo"]
-                  }
+                  },
+                  defer_loading: true
                 },
                 {
                   name: "search_github_code",
@@ -2157,7 +3575,197 @@ Bun.serve({
                       }
                     },
                     required: ["query"]
-                  }
+                  },
+                  defer_loading: true
+                },
+                {
+                  name: "list_github_pull_requests",
+                  description: "List pull requests from Frontier GitHub repositories. Use this when users ask about PRs, want to see open/closed PRs, or check PR status.",
+                  input_schema: {
+                    type: "object",
+                    properties: {
+                      repo: {
+                        type: "string",
+                        description: "The repository name in format 'owner/repo'. Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds",
+                        enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds"]
+                      },
+                      state: {
+                        type: "string",
+                        description: "Filter by PR state: 'open', 'closed', or 'all' (default: 'open')",
+                        enum: ["open", "closed", "all"]
+                      },
+                      limit: {
+                        type: "number",
+                        description: "Number of PRs to fetch (default: 10, max: 30)"
+                      }
+                    },
+                    required: ["repo"]
+                  },
+                  defer_loading: true
+                },
+                {
+                  name: "get_github_pull_request",
+                  description: "Get detailed information about a specific GitHub pull request including description, changes, diff, and CI/CD status (GitHub Actions, tests, builds). Use this when users provide a PR URL like 'https://github.com/parkhub/graph-api/pull/1056' or ask about checks/tests. Extract the repo as 'parkhub/graph-api' (combined owner/repo) and the PR number as 1056.",
+                  input_schema: {
+                    type: "object",
+                    properties: {
+                      repo: {
+                        type: "string",
+                        description: "The FULL repository name in format 'owner/repo' (e.g., 'parkhub/graph-api', NOT just 'graph-api'). Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds",
+                        enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds"]
+                      },
+                      prNumber: {
+                        type: "number",
+                        description: "The pull request number (e.g., 1056 from the URL https://github.com/parkhub/graph-api/pull/1056)"
+                      },
+                      includeDiff: {
+                        type: "boolean",
+                        description: "Whether to include the full diff of changes (default: true)"
+                      }
+                    },
+                    required: ["repo", "prNumber"]
+                  },
+                  defer_loading: true
+                },
+                {
+                  name: "trigger_github_workflow",
+                  description: "Trigger a GitHub Actions workflow run. Use this when users ask to run a workflow, trigger a deployment, re-run tests, or start a CI/CD job. IMPORTANT: Ask the user for confirmation before triggering workflows.",
+                  input_schema: {
+                    type: "object",
+                    properties: {
+                      repo: {
+                        type: "string",
+                        description: "The FULL repository name in format 'owner/repo' (e.g., 'parkhub/graph-api'). Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds",
+                        enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds"]
+                      },
+                      workflowId: {
+                        type: "string",
+                        description: "The workflow file name (e.g., 'ci.yml', 'deploy.yml') or workflow ID number"
+                      },
+                      ref: {
+                        type: "string",
+                        description: "The git reference (branch/tag) to run the workflow on (default: 'main')"
+                      },
+                      inputs: {
+                        type: "object",
+                        description: "Optional inputs for the workflow (if it accepts workflow_dispatch inputs)"
+                      }
+                    },
+                    required: ["repo", "workflowId"]
+                  },
+                  defer_loading: true
+                },
+                {
+                  name: "rerun_github_workflow",
+                  description: "Re-run a failed GitHub Actions workflow run. Use this when users ask to re-run failed checks, retry a failed build, or restart failed tests on a PR.",
+                  input_schema: {
+                    type: "object",
+                    properties: {
+                      repo: {
+                        type: "string",
+                        description: "The FULL repository name in format 'owner/repo' (e.g., 'parkhub/graph-api'). Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds",
+                        enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds"]
+                      },
+                      runId: {
+                        type: "number",
+                        description: "The workflow run ID to re-run (get this from check runs in the PR details)"
+                      },
+                      failedJobsOnly: {
+                        type: "boolean",
+                        description: "Whether to re-run only failed jobs (true) or all jobs (false). Default: false"
+                      }
+                    },
+                    required: ["repo", "runId"]
+                  },
+                  defer_loading: true
+                },
+                {
+                  name: "create_github_pull_request",
+                  description: "Create a new GitHub pull request with code changes. Use this when users ask you to make code changes, fix bugs, add features, or update files. This will create a new branch, commit the changes, and open a PR.",
+                  input_schema: {
+                    type: "object",
+                    properties: {
+                      repo: {
+                        type: "string",
+                        description: "The repository name in format 'owner/repo'. Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds",
+                        enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds"]
+                      },
+                      branch: {
+                        type: "string",
+                        description: "The branch name for the PR (e.g., 'fix/auth-bug', 'feature/dark-mode'). Use descriptive names with prefixes like fix/, feature/, chore/"
+                      },
+                      files: {
+                        type: "array",
+                        description: "Array of files to create or update. Each file object must have 'path' (relative to repo root) and 'content' (full file content as string)",
+                        items: {
+                          type: "object",
+                          properties: {
+                            path: {
+                              type: "string",
+                              description: "File path relative to repo root (e.g., 'src/auth.ts', 'README.md')"
+                            },
+                            content: {
+                              type: "string",
+                              description: "Complete file content as a string"
+                            }
+                          },
+                          required: ["path", "content"]
+                        }
+                      },
+                      title: {
+                        type: "string",
+                        description: "Clear, concise PR title that describes the changes"
+                      },
+                      body: {
+                        type: "string",
+                        description: "Detailed PR description including context, changes made, testing instructions, and any related ticket numbers"
+                      },
+                      commitMessage: {
+                        type: "string",
+                        description: "Commit message that explains what and why"
+                      },
+                      base: {
+                        type: "string",
+                        description: "Base branch to merge into (default: 'main')"
+                      }
+                    },
+                    required: ["repo", "branch", "files", "title", "commitMessage"]
+                  },
+                  defer_loading: true
+                },
+                {
+                  name: "get_jira_issue",
+                  description: "Get details of a specific Jira ticket by its key (e.g., PV-123). Use this when users ask about a specific ticket, want to check ticket status, or reference a ticket number.",
+                  input_schema: {
+                    type: "object",
+                    properties: {
+                      issueKey: {
+                        type: "string",
+                        description: "The Jira issue key (e.g., 'PV-123', 'PV-456')"
+                      }
+                    },
+                    required: ["issueKey"]
+                  },
+                  defer_loading: true
+                },
+                {
+                  name: "search_jira_issues",
+                  description: "Search for Jira tickets in the PV (Frontier) project by keywords. Use this when users ask to find tickets, search for work items, or look up tickets by topic (e.g., 'find tickets about authentication', 'search for API bugs').",
+                  input_schema: {
+                    type: "object",
+                    properties: {
+                      query: {
+                        type: "string",
+                        description: "Search keywords to find in ticket summaries and descriptions"
+                      },
+                      maxResults: {
+                        type: "number",
+                        description: "Maximum number of results to return (default: 10, max: 50)"
+                      }
+                    },
+                    required: ["query"]
+                  },
+                  defer_loading: true
                 },
                 {
                   name: "create_jira_issue",
@@ -2190,7 +3798,8 @@ Bun.serve({
                       }
                     },
                     required: ["summary"]
-                  }
+                  },
+                  defer_loading: true
                 }
               ]
             });

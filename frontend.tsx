@@ -20,6 +20,7 @@ function VictorMonitor() {
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [theme, setTheme] = useState<"western" | "modern">("western");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -135,21 +136,24 @@ function VictorMonitor() {
 
   return (
     <div className="modal-overlay">
-      <div className="chat-modal">
-        <div className="chat-header">
-          <img src="/victor-face.webp" alt="Victor" className="header-avatar" />
-          <div className="header-title">
-            <h2>Victor - Frontier AI Assistant</h2>
-          </div>
+      <div className={`chat-modal ${theme}`}>
+        <div className="theme-toggle-container">
+          <button
+            className="theme-toggle"
+            onClick={() => setTheme(theme === "western" ? "modern" : "western")}
+            title="Switch theme"
+          >
+            {theme === "western" ? "🎨 Modern" : "🤠 Western"}
+          </button>
         </div>
-
         <div className="chat-messages">
           {messages.length === 0 && (
             <div className="welcome-message">
               <img src="/victor-face.webp" alt="Victor" className="welcome-avatar" />
               <div className="welcome-text">
                 <h2>Howdy, partner!</h2>
-                <p>I'm Victor, your friendly AI assistant for the Frontier team. Ask me anything about your parking pass application, coding help, or just shoot the breeze!</p>
+                <p>I'm Victor, your AI assistant for the Frontier team.</p>
+                <p className="welcome-prompt">What can I help you with today, partner?</p>
               </div>
             </div>
           )}

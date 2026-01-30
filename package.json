@@ -4,6 +4,8 @@
   "type": "module",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
+    "@modelcontextprotocol/server-github": "^2025.4.8",
+    "@octokit/rest": "^22.0.1",
     "js-yaml": "^4.1.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
