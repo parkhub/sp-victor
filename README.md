@@ -159,9 +159,6 @@ ai-victor/
 ├── frontend.tsx          # React frontend application
 ├── build.ts              # Production build script
 ├── victor-face.webp      # Victor's avatar image
-├── public/               # Public assets
-│   ├── frontend.tsx      # Alternative frontend location
-│   └── victor-face.webp  # Public avatar
 ├── package.json          # Dependencies and scripts
 ├── tsconfig.json         # TypeScript configuration
 ├── .env                  # Environment variables (create this)
