@@ -1,13 +1,20 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
+import { SelectCard } from "./SelectCard";
 import ReactMarkdown from 'react-markdown';
 import './style.css';
 
 interface Message {
   role: "user" | "assistant";
   content: string;
+  type?: string;
+  data?: any;
 }
 
+interface ClaudeResponse {
+  type: string;
+  data: any;
+}
 
 function VictorMonitor() {
   const [message, setMessage] = useState("");
@@ -31,11 +38,11 @@ function VictorMonitor() {
     setIsLoading(true);
 
     try {
-      // Build history for API call
+      // Build history for API call (exclude structured data)
       const history = messages
         .map(msg => ({
           role: msg.role,
-          content: msg.content
+          content: msg.type ? JSON.stringify({ type: msg.type, data: msg.data }) : msg.content
         }))
         .filter(msg => msg.content && msg.content.trim().length > 0); // Filter out empty messages
 
@@ -47,11 +54,23 @@ function VictorMonitor() {
       const data = await res.json();
 
       // Add assistant response
-      const assistantMsg: Message = {
-        role: "assistant",
-        content: data.reply
-      };
-      setMessages(prev => [...prev, assistantMsg]);
+      if (data.type) {
+        // Structured response
+        const assistantMsg: Message = {
+          role: "assistant",
+          content: data.data.question || "Please make a selection:",
+          type: data.type,
+          data: data.data
+        };
+        setMessages(prev => [...prev, assistantMsg]);
+      } else {
+        // Plain text response
+        const assistantMsg: Message = {
+          role: "assistant",
+          content: data.reply
+        };
+        setMessages(prev => [...prev, assistantMsg]);
+      }
     } catch (error) {
       const errorMsg: Message = {
         role: "assistant",
@@ -78,6 +97,9 @@ function VictorMonitor() {
     }
   };
 
+  const handleSelection = async (selectedValue: string) => {
+    await sendMessage(selectedValue);
+  };
 
   const renderMessage = (msg: Message, index: number) => {
     if (msg.role === "user") {
@@ -95,9 +117,18 @@ function VictorMonitor() {
       <div key={index} className="message-row assistant-message-row">
         <img src="/victor-face.webp" alt="Victor" className="message-avatar" />
         <div className="assistant-message-content">
-          <div className="assistant-message markdown-content">
-            <ReactMarkdown>{msg.content}</ReactMarkdown>
-          </div>
+          {msg.type === "select_card" ? (
+            <>
+              <div className="assistant-message markdown-content">
+                <ReactMarkdown>{msg.content}</ReactMarkdown>
+              </div>
+              <SelectCard data={msg.data} onSelect={handleSelection} />
+            </>
+          ) : (
+            <div className="assistant-message markdown-content">
+              <ReactMarkdown>{msg.content}</ReactMarkdown>
+            </div>
+          )}
         </div>
       </div>
     );

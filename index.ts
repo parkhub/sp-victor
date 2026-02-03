@@ -460,61 +460,7 @@ This helps you give accurate, up-to-date information based on the team's actual 
 
 IMPORTANT: Response Format
 
-You can respond in two ways:
-
-1. PLAIN TEXT (default): For most conversations, just respond naturally with text. Use markdown for formatting.
-
-2. STRUCTURED JSON: When you need the user to choose from specific options, respond with ONLY JSON (no text before or after):
-
-CRITICAL: When using select_card, respond with ONLY the JSON structure. Do NOT include any plain text before or after the JSON. The JSON itself should contain your friendly greeting in the "question" field.
-
-{
-  "type": "select_card",
-  "data": {
-    "question": "Your full question with friendly Victor greeting here",
-    "options": [
-      {
-        "label": "Option 1 Label",
-        "value": "option-1-value",
-        "description": "Optional description"
-      },
-      {
-        "label": "Option 2 Label",
-        "value": "option-2-value",
-        "description": "Optional description"
-      }
-    ],
-    "context": "Optional additional context"
-  }
-}
-
-Use select_card when:
-- The user needs to pick from a predefined set of options
-- You want to offer multiple approaches to solve a problem
-- You're helping them choose between tools, frameworks, or patterns
-- Any situation where discrete choices make more sense than free text
-
-Examples:
-
-User: "What framework should I use for the frontend?"
-You (JSON response - ONLY JSON, no other text):
-{
-  "type": "select_card",
-  "data": {
-    "question": "Well howdy, partner! Which frontend framework suits your fancy? There's a whole bunch of great options out there!",
-    "options": [
-      { "label": "React", "value": "react", "description": "Component-based, great ecosystem" },
-      { "label": "Vue", "value": "vue", "description": "Progressive, easy to learn" },
-      { "label": "Svelte", "value": "svelte", "description": "Compiled, fast and lightweight" }
-    ],
-    "context": "All these are mighty fine choices for building web apps!"
-  }
-}
-
-User: "Help me debug this code"
-You (plain text): "Sure thing, partner! Show me what code you're wrangling with and I'll help you track down that bug!"
-
-After a user selects an option, their next message will be the value they selected (e.g., "react"). Use this to continue the conversation naturally.
+Respond naturally with text using markdown for formatting. Be conversational and helpful in your responses.
 
 HANDLING CONFLUENCE URLS:
 When a user provides a Confluence URL, you should IMMEDIATELY fetch it - don't search first!
@@ -4309,48 +4255,6 @@ Bun.serve({
 
           const textContent = finalResponse.content.find(block => block.type === "text");
           const responseText = textContent?.type === "text" ? textContent.text : "";
-
-          // Try to parse as JSON (for structured responses like select_card)
-          try {
-            let cleanedText = responseText.trim();
-
-            // Strip markdown code blocks if present
-            if (cleanedText.startsWith("```json")) {
-              cleanedText = cleanedText.replace(/^```json\s*/, "").replace(/\s*```$/, "");
-            } else if (cleanedText.startsWith("```")) {
-              cleanedText = cleanedText.replace(/^```\s*/, "").replace(/\s*```$/, "");
-            }
-
-            // Check if there's JSON embedded in the text
-            const jsonMatch = cleanedText.match(/\{[\s\S]*"type"\s*:\s*"[^"]+"[\s\S]*\}/);
-
-            if (jsonMatch) {
-              // Extract the JSON part
-              const jsonStr = jsonMatch[0];
-              const jsonResponse = JSON.parse(jsonStr);
-
-              // If it has a type field, it's a structured response
-              if (jsonResponse.type) {
-                // Extract any text before the JSON as a preamble
-                const preamble = cleanedText.substring(0, jsonMatch.index).trim();
-
-                // If there's preamble text, include it in the question
-                if (preamble && jsonResponse.data?.question) {
-                  jsonResponse.data.question = preamble + "\n\n" + jsonResponse.data.question;
-                }
-
-                return Response.json(jsonResponse);
-              }
-            }
-
-            // Try parsing the whole thing as JSON (if it's just JSON)
-            const jsonResponse = JSON.parse(cleanedText);
-            if (jsonResponse.type) {
-              return Response.json(jsonResponse);
-            }
-          } catch (parseError) {
-            // Not JSON, treat as plain text
-          }
 
           // Return as plain text response
           return Response.json({
