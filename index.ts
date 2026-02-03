@@ -62,7 +62,9 @@ You have access to view releases AND read code from these Frontier repositories:
 - **parkhub/graph-api** - Graph API service
 - **parkhub/smartpass-ui** - SmartPass consumer-facing UI
 - **parkhub/smartpass-admin-ui** - SmartPass admin interface
-- **parkhub/egds** - Enterprise Design System
+- **parkhub/egds** - Event/listing management system with high-performance API and migration services (Golang)
+- **parkhub/data-migration** - Data migration scripts and utilities
+- **parkhub/sp-loadtesting** - Load testing tools and configurations
 
 **GitHub Releases:**
 When users ask about:
@@ -181,6 +183,33 @@ Use the **create_github_pull_request** tool when users ask you to make code chan
    - PR body (detailed description with context and testing instructions)
    - Commit message (explains what and why)
 
+**Updating Existing GitHub Pull Requests:**
+Use the **update_github_pull_request** tool when you need to push additional commits to an existing PR!
+
+**When to Update a PR:**
+- "Add better validation to that PR I just created"
+- "Update PR #1182 with additional changes"
+- "Push a fix to the existing auth PR"
+- User says there's already a PR for this and wants you to update it instead of creating a new one
+
+**PR Update Strategy:**
+1. You MUST know the branch name - if the user mentions a PR number but not the branch:
+   - Use get_github_pull_request to fetch the PR details and get the branch name
+   - Example: "Let me fetch that PR first to see what branch it's on, partner!"
+2. Read existing code if needed to understand what's there
+3. Use update_github_pull_request with:
+   - Repository (same as create)
+   - Branch name (the existing PR's branch)
+   - PR number (optional, helps with logging)
+   - Files to update (array of {path, content})
+   - Commit message (explains what additional changes you're making)
+
+**IMPORTANT:**
+- update_github_pull_request pushes commits to an EXISTING branch
+- If the branch doesn't exist, it will error - use create_github_pull_request instead
+- When in doubt, ask the user: "Should I update the existing PR or create a new one?"
+- **Best Practice**: When you create a PR and then realize you need to make more changes, use update_github_pull_request to update that same PR instead of creating a second one!
+
 **Best Practices:**
 - Always create PRs from feature branches (tool handles this automatically)
 - Write clear commit messages that explain the "why", not just the "what"
@@ -188,13 +217,16 @@ Use the **create_github_pull_request** tool when users ask you to make code chan
 - Link related Jira tickets in PR body when applicable
 - For small changes, use concise titles like "Fix typo in README"
 - For larger changes, use descriptive titles like "Add user authentication with JWT"
+- When you create a PR and need to add more changes, UPDATE that PR instead of creating a new one
 
 **Available Repositories:**
 - parkhub/smartpass-api - SmartPass backend API
 - parkhub/graph-api - Graph API service
 - parkhub/smartpass-ui - SmartPass consumer-facing UI
 - parkhub/smartpass-admin-ui - SmartPass admin interface
-- parkhub/egds - Enterprise Design System
+- parkhub/egds - Event/listing management system with high-performance API and migration services (Golang)
+- parkhub/data-migration - Data migration scripts and utilities
+- parkhub/sp-loadtesting - Load testing tools and configurations
 
 SMARTPASS PARTNER API DOCUMENTATION (EXTERNAL):
 You have access to the **external** SmartPass Partner API documentation (Swagger/OpenAPI spec)!
@@ -220,6 +252,16 @@ When users ask about the partner API:
 
 WORKING WITH JIRA TICKETS:
 You can create, search, and look up Jira tickets in the PV (Frontier) project!
+
+**Getting the current sprint** - Use **get_current_sprint**:
+- When users reference "my team's current sprint", "current sprint", "this sprint", or "active sprint"
+- When users ask "find all items in my team's current sprint", "what's in the current sprint?", "show me the current sprint"
+- This returns the sprint name, ID, dates, and goal for the Frontier team's active sprint
+- After getting the sprint info, use **search_jira_issues** with the sprintId parameter to find tickets in that sprint
+- Example workflow:
+  1. User says "find all items in my team's current sprint"
+  2. Call get_current_sprint to get the sprint ID
+  3. Call search_jira_issues with sprintId (no query needed) to get all tickets in the sprint
 
 **Looking up specific tickets** - Use **get_jira_issue**:
 - When users mention a ticket number: "What's PV-123 about?", "Check PV-456", "Show me ticket PV-789"
@@ -283,6 +325,52 @@ When creating folders:
 - If they want it inside another folder, use the parentPageId parameter
 - Folders are great for organizing multiple related documents
 
+**RELEASE DOCUMENTS - SPECIAL HANDLING:**
+When users ask to create or look up release documents:
+- **ALWAYS** create release documents under the "Release Documents" folder in Confluence
+- **ALWAYS** search for existing release documents in the "Release Documents" folder
+- **CRITICAL**: When creating a new release document, you MUST use the template:
+  1. First use **get_confluence_children** to find the "Release Documents" folder and get its page ID
+  2. Use **get_confluence_children** on the "Release Documents" folder to list its pages
+  3. Find the page with "[TEMPLATE]" in its title
+  4. Use **get_confluence_page** to fetch the template page's content
+  5. Use that template content as the basis for the new release document (customize it with specific release info)
+  6. Create the new page with **create_confluence_page** using the template content as a starting point and the "Release Documents" folder as the parent
+- To lookup: Use **search_confluence** with query like "Release Documents [version/sprint/date]" or use **get_confluence_children** on the "Release Documents" folder to browse releases
+
+**Populating Release Documents with Sprint PRs:**
+When users ask to add PRs from the current sprint to a release document (or when creating a new release document for a sprint):
+1. **Get the current sprint** using **get_current_sprint** to get sprint details and ID
+2. **Find sprint tickets** using **search_jira_issues** with the sprintId parameter to get all tickets in the sprint
+3. **Check each repo for closed PRs** that relate to those tickets:
+   - Use **list_github_pull_requests** with state="closed" for relevant repos (especially data-migration, smartpass-api, graph-api, smartpass-ui, smartpass-admin-ui, egds)
+   - Match PRs to sprint tickets by looking for ticket keys (e.g., "PV-1234") in PR titles or bodies
+   - When users say "look through my data migrations", focus on the **parkhub/data-migration** repo
+4. **Extract PR details** for each matched PR:
+   - PR number, title, author, merge date, description
+   - For **database migration PRs** (from data-migration repo), also fetch the migration code:
+     - Use **get_github_pull_request** to get the PR details and file changes
+     - Look for migration files (typically in paths like migrations/ or with .sql extension)
+     - Use **read_github_file** to get the actual migration SQL code (the "up" migration)
+   - For code PRs, note the key changes but don't include full code unless requested
+5. **Add to appropriate sections** in the release document:
+   - Database migrations go in the "Database Migrations" section (include PR link, ticket, author, description, and SQL code)
+   - API changes go in relevant API sections
+   - UI changes go in relevant UI sections
+   - Add ticket keys to the Jira tickets section
+   - Add PR authors to the contributors list
+6. **Update the document** using **update_confluence_page** with the enhanced content
+
+When users ask to "add the code" or "add the migration code":
+- They mean the SQL from the migration file (the "up" migration)
+- Use **read_github_file** to fetch the migration file content
+- Add it to the Database Migrations section formatted as code using Confluence code macro with language=sql and the SQL wrapped in CDATA
+
+Examples:
+  - "Create a release document for Sprint 23" → Get sprint, find tickets, find PRs, populate template
+  - "Look through my data migrations closed PRs and see if there are any from items in my current sprint. If so add them to the relevant section." → Get current sprint, get sprint tickets, search data-migration PRs, match and add to document
+  - "Add the code from the up migration to it" → Fetch the migration file, extract SQL, add to document with proper formatting
+
 **Confluence Storage Format - Simple XHTML Tags:**
 - Headings: \`<h1>Main Title</h1>\`, \`<h2>Section</h2>\`, \`<h3>Subsection</h3>\`
 - Paragraphs: \`<p>Your text here</p>\`
@@ -291,7 +379,7 @@ When creating folders:
 - Bold: \`<strong>bold text</strong>\`
 - Italic: \`<em>italic text</em>\`
 - Code inline: \`<code>code</code>\`
-- Code blocks: \`<pre><code>your code here</code></pre>\` (for simple code blocks)
+- Code blocks: \`<pre><code>your code here</code></pre>\` (can contain multiple lines of code, not just single lines)
 - Links: \`<ac:link><ri:page ri:content-title="Page Name"/></ac:link>\` (for internal links) or use page URLs for external
 - Line breaks: \`<br/>\`
 
@@ -1141,14 +1229,11 @@ Bun.serve({
     "/api/jira/search-issues": {
       async POST(req) {
         try {
-          const { query, maxResults = 10 } = await req.json();
+          const { query, maxResults = 10, sprintId } = await req.json();
           console.log("\n🔍 Jira Search Issues Request:");
           console.log("  Query:", query);
+          console.log("  Sprint ID:", sprintId || "None");
           console.log("  Max Results:", maxResults);
-
-          if (!query) {
-            return Response.json({ error: "Query is required" }, { status: 400 });
-          }
 
           const atlassianUrl = process.env.ATLASSIAN_URL;
           const atlassianAuth = process.env.ATLASSIAN_AUTH;
@@ -1161,7 +1246,19 @@ Bun.serve({
           const baseUrl = atlassianUrl.endsWith('/') ? atlassianUrl.slice(0, -1) : atlassianUrl;
 
           // Build JQL query - search in PV project by default
-          const jql = `project = PV AND (summary ~ "${query}" OR description ~ "${query}") ORDER BY updated DESC`;
+          let jql = `project = PV`;
+
+          // Add sprint filter if provided
+          if (sprintId) {
+            jql += ` AND sprint = ${sprintId}`;
+          }
+
+          // Add text search if query provided
+          if (query) {
+            jql += ` AND (summary ~ "${query}" OR description ~ "${query}")`;
+          }
+
+          jql += ` ORDER BY updated DESC`;
           const searchUrl = `${baseUrl}/rest/api/3/search/jql`;
           console.log("  Search URL:", searchUrl);
           console.log("  JQL:", jql);
@@ -1344,6 +1441,80 @@ Bun.serve({
       }
     },
 
+    "/api/jira/get-current-sprint": {
+      async POST(req) {
+        try {
+          console.log("\n🏃 Jira Get Current Sprint Request");
+
+          const atlassianUrl = process.env.ATLASSIAN_URL;
+          const atlassianAuth = process.env.ATLASSIAN_AUTH;
+
+          if (!atlassianUrl || !atlassianAuth) {
+            console.error("❌ Jira not configured!");
+            return Response.json({ error: "Jira not configured" }, { status: 500 });
+          }
+
+          const baseUrl = atlassianUrl.endsWith('/') ? atlassianUrl.slice(0, -1) : atlassianUrl;
+
+          // Get the board ID from environment or use default
+          const boardId = process.env.JIRA_BOARD_ID ? parseInt(process.env.JIRA_BOARD_ID) : 193;
+          const sprintUrl = `${baseUrl}/rest/agile/1.0/board/${boardId}/sprint?state=active`;
+          console.log("  Sprint URL:", sprintUrl);
+
+          const response = await fetch(sprintUrl, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Basic ${Buffer.from(atlassianAuth).toString('base64')}`,
+              'Accept': 'application/json',
+              'Content-Type': 'application/json'
+            }
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error("❌ Jira API Error:");
+            console.error("  Status:", response.status);
+            console.error("  Response:", errorText);
+            return Response.json({
+              error: `Jira API error: ${response.status}`,
+              details: errorText
+            }, { status: response.status });
+          }
+
+          const data = await response.json();
+          console.log("  ✅ Found sprints:", data.values?.length || 0);
+
+          // Return the first active sprint
+          const activeSprint = data.values?.[0];
+
+          if (!activeSprint) {
+            return Response.json({
+              sprint: null,
+              message: "No active sprint found for the Frontier team"
+            });
+          }
+
+          return Response.json({
+            sprint: {
+              id: activeSprint.id,
+              name: activeSprint.name,
+              state: activeSprint.state,
+              startDate: activeSprint.startDate,
+              endDate: activeSprint.endDate,
+              goal: activeSprint.goal,
+              boardId: boardId
+            }
+          });
+        } catch (error) {
+          console.error("❌ Jira get current sprint error:", error);
+          return Response.json({
+            error: "Failed to get current sprint",
+            details: error instanceof Error ? error.message : String(error)
+          }, { status: 500 });
+        }
+      }
+    },
+
     "/api/swagger/fetch": {
       async POST(req) {
         try {
@@ -1433,7 +1604,9 @@ Bun.serve({
             "parkhub/graph-api",
             "parkhub/smartpass-ui",
             "parkhub/smartpass-admin-ui",
-            "parkhub/egds"
+            "parkhub/egds",
+            "parkhub/data-migration",
+            "parkhub/sp-loadtesting"
           ];
 
           if (!allowedRepos.includes(repo)) {
@@ -1513,7 +1686,7 @@ Bun.serve({
 
           if (!repo) {
             return Response.json({
-              error: "Repository parameter is required. You must specify which repository to list. Valid options are: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, or parkhub/egds. If the user didn't specify a repo, ask them which one they want to explore."
+              error: "Repository parameter is required. You must specify which repository to list. Valid options are: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds, parkhub/data-migration, or parkhub/sp-loadtesting. If the user didn't specify a repo, ask them which one they want to explore."
             }, { status: 400 });
           }
 
@@ -1523,7 +1696,9 @@ Bun.serve({
             "parkhub/graph-api",
             "parkhub/smartpass-ui",
             "parkhub/smartpass-admin-ui",
-            "parkhub/egds"
+            "parkhub/egds",
+            "parkhub/data-migration",
+            "parkhub/sp-loadtesting"
           ];
 
           if (!allowedRepos.includes(repo)) {
@@ -1610,7 +1785,9 @@ Bun.serve({
             "parkhub/graph-api",
             "parkhub/smartpass-ui",
             "parkhub/smartpass-admin-ui",
-            "parkhub/egds"
+            "parkhub/egds",
+            "parkhub/data-migration",
+            "parkhub/sp-loadtesting"
           ];
 
           if (repo && !allowedRepos.includes(repo)) {
@@ -1707,7 +1884,9 @@ Bun.serve({
             "parkhub/graph-api",
             "parkhub/smartpass-ui",
             "parkhub/smartpass-admin-ui",
-            "parkhub/egds"
+            "parkhub/egds",
+            "parkhub/data-migration",
+            "parkhub/sp-loadtesting"
           ];
 
           if (!allowedRepos.includes(repo)) {
@@ -1799,7 +1978,9 @@ Bun.serve({
             "parkhub/graph-api",
             "parkhub/smartpass-ui",
             "parkhub/smartpass-admin-ui",
-            "parkhub/egds"
+            "parkhub/egds",
+            "parkhub/data-migration",
+            "parkhub/sp-loadtesting"
           ];
 
           if (!allowedRepos.includes(repo)) {
@@ -1896,7 +2077,9 @@ Bun.serve({
             "parkhub/graph-api",
             "parkhub/smartpass-ui",
             "parkhub/smartpass-admin-ui",
-            "parkhub/egds"
+            "parkhub/egds",
+            "parkhub/data-migration",
+            "parkhub/sp-loadtesting"
           ];
 
           if (!allowedRepos.includes(repo)) {
@@ -2089,7 +2272,9 @@ Bun.serve({
             "parkhub/graph-api",
             "parkhub/smartpass-ui",
             "parkhub/smartpass-admin-ui",
-            "parkhub/egds"
+            "parkhub/egds",
+            "parkhub/data-migration",
+            "parkhub/sp-loadtesting"
           ];
 
           if (!allowedRepos.includes(repo)) {
@@ -2175,7 +2360,9 @@ Bun.serve({
             "parkhub/graph-api",
             "parkhub/smartpass-ui",
             "parkhub/smartpass-admin-ui",
-            "parkhub/egds"
+            "parkhub/egds",
+            "parkhub/data-migration",
+            "parkhub/sp-loadtesting"
           ];
 
           if (!allowedRepos.includes(repo)) {
@@ -2263,7 +2450,9 @@ Bun.serve({
             "parkhub/graph-api",
             "parkhub/smartpass-ui",
             "parkhub/smartpass-admin-ui",
-            "parkhub/egds"
+            "parkhub/egds",
+            "parkhub/data-migration",
+            "parkhub/sp-loadtesting"
           ];
 
           if (!allowedRepos.includes(repo)) {
@@ -2418,6 +2607,151 @@ Bun.serve({
       }
     },
 
+    "/api/github/update-pr": {
+      async POST(req) {
+        try {
+          const { repo, branch, prNumber, files, commitMessage } = await req.json();
+          console.log("\n🐙 GitHub Update PR Request:");
+          console.log("  Repo:", repo);
+          console.log("  Branch:", branch);
+          console.log("  PR Number:", prNumber);
+          console.log("  Files:", files?.length);
+
+          if (!repo || !branch || !files || !commitMessage) {
+            return Response.json({
+              error: "Repo, branch, files, and commitMessage are required"
+            }, { status: 400 });
+          }
+
+          // Validate allowed repos
+          const allowedRepos = [
+            "parkhub/smartpass-api",
+            "parkhub/graph-api",
+            "parkhub/smartpass-ui",
+            "parkhub/smartpass-admin-ui",
+            "parkhub/egds",
+            "parkhub/data-migration",
+            "parkhub/sp-loadtesting"
+          ];
+
+          if (!allowedRepos.includes(repo)) {
+            console.error("❌ Unauthorized repo:", repo);
+            return Response.json({
+              error: "Unauthorized repository",
+              allowedRepos
+            }, { status: 403 });
+          }
+
+          const githubToken = process.env.GITHUB_TOKEN;
+
+          if (!githubToken) {
+            console.error("❌ GitHub token not configured!");
+            return Response.json({ error: "GitHub not configured" }, { status: 500 });
+          }
+
+          const headers = {
+            'Accept': 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+            'Authorization': `Bearer ${githubToken}`
+          };
+
+          // 1. Verify the branch exists
+          console.log("  Step 1: Verifying branch exists...");
+          const branchRefUrl = `https://api.github.com/repos/${repo}/git/refs/heads/${branch}`;
+          const branchRefResponse = await fetch(branchRefUrl, { headers });
+
+          if (!branchRefResponse.ok) {
+            const errorText = await branchRefResponse.text();
+            console.error("❌ Branch does not exist:", errorText);
+            return Response.json({
+              error: `Branch '${branch}' does not exist. Use create_github_pull_request to create a new PR.`,
+              details: errorText
+            }, { status: 404 });
+          }
+
+          const branchRef = await branchRefResponse.json();
+          const branchSha = branchRef.object.sha;
+          console.log("  Current branch SHA:", branchSha);
+
+          // 2. Update files on the existing branch
+          console.log("  Step 2: Updating files...");
+          for (const file of files) {
+            console.log("    Updating:", file.path);
+
+            // Check if file exists to get its SHA
+            const fileUrl = `https://api.github.com/repos/${repo}/contents/${file.path}?ref=${branch}`;
+            const fileResponse = await fetch(fileUrl, { headers });
+
+            let fileSha = null;
+            if (fileResponse.ok) {
+              const fileData = await fileResponse.json();
+              fileSha = fileData.sha;
+              console.log("      File exists, SHA:", fileSha);
+            } else {
+              console.log("      New file");
+            }
+
+            // Update or create the file
+            const updateFileUrl = `https://api.github.com/repos/${repo}/contents/${file.path}`;
+            const updateFileResponse = await fetch(updateFileUrl, {
+              method: 'PUT',
+              headers,
+              body: JSON.stringify({
+                message: commitMessage,
+                content: Buffer.from(file.content).toString('base64'),
+                branch: branch,
+                ...(fileSha && { sha: fileSha })
+              })
+            });
+
+            if (!updateFileResponse.ok) {
+              const errorText = await updateFileResponse.text();
+              console.error("❌ Failed to update file:", file.path, errorText);
+              return Response.json({
+                error: `Failed to update file ${file.path}: ${updateFileResponse.status}`,
+                details: errorText
+              }, { status: updateFileResponse.status });
+            }
+
+            console.log("      ✅ Updated");
+          }
+
+          // 3. Get PR details if prNumber was provided
+          let prUrl = null;
+          if (prNumber) {
+            console.log("  Step 3: Getting PR details...");
+            const prDetailsUrl = `https://api.github.com/repos/${repo}/pulls/${prNumber}`;
+            const prDetailsResponse = await fetch(prDetailsUrl, { headers });
+
+            if (prDetailsResponse.ok) {
+              const prData = await prDetailsResponse.json();
+              prUrl = prData.html_url;
+              console.log("  ✅ PR updated:", prUrl);
+            }
+          }
+
+          return Response.json({
+            success: true,
+            message: `Successfully pushed ${files.length} file(s) to branch '${branch}'`,
+            pr: prNumber ? {
+              number: prNumber,
+              url: prUrl,
+              branch: branch
+            } : {
+              branch: branch,
+              message: "Changes pushed to branch (no PR number provided)"
+            }
+          });
+        } catch (error) {
+          console.error("❌ GitHub update PR error:", error);
+          return Response.json({
+            error: "Failed to update GitHub pull request",
+            details: error instanceof Error ? error.message : String(error)
+          }, { status: 500 });
+        }
+      }
+    },
+
     "/api/submit": {
       POST: async (req) => {
         try {
@@ -2445,6 +2779,10 @@ Bun.serve({
               {
                 type: "tool_search_tool_bm25_20251119",
                 name: "tool_search_tool_bm25"
+              },
+              {
+                type: "text_editor_20250728",
+                name: "str_replace_based_edit_tool"
               },
               {
                 name: "list_confluence_root",
@@ -2586,8 +2924,8 @@ Bun.serve({
                   properties: {
                     repo: {
                       type: "string",
-                      description: "The repository name in format 'owner/repo'. Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds",
-                      enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds"]
+                      description: "The repository name in format 'owner/repo'. Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds, parkhub/data-migration, parkhub/sp-loadtesting",
+                      enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds", "parkhub/data-migration", "parkhub/sp-loadtesting"]
                     },
                     limit: {
                       type: "number",
@@ -2606,8 +2944,8 @@ Bun.serve({
                   properties: {
                     repo: {
                       type: "string",
-                      description: "The repository name in format 'owner/repo'. Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds",
-                      enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds"]
+                      description: "The repository name in format 'owner/repo'. Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds, parkhub/data-migration, parkhub/sp-loadtesting",
+                      enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds", "parkhub/data-migration", "parkhub/sp-loadtesting"]
                     },
                     path: {
                       type: "string",
@@ -2630,8 +2968,8 @@ Bun.serve({
                   properties: {
                     repo: {
                       type: "string",
-                      description: "REQUIRED: The repository name in format 'owner/repo'. Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds",
-                      enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds"]
+                      description: "REQUIRED: The repository name in format 'owner/repo'. Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds, parkhub/data-migration, parkhub/sp-loadtesting",
+                      enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds", "parkhub/data-migration", "parkhub/sp-loadtesting"]
                     },
                     path: {
                       type: "string",
@@ -2659,7 +2997,7 @@ Bun.serve({
                     repo: {
                       type: "string",
                       description: "Optional: Limit search to a specific repo. If omitted, searches all Frontier repos.",
-                      enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds"]
+                      enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds", "parkhub/data-migration", "parkhub/sp-loadtesting"]
                     }
                   },
                   required: ["query"]
@@ -2674,8 +3012,8 @@ Bun.serve({
                   properties: {
                     repo: {
                       type: "string",
-                      description: "The repository name in format 'owner/repo'. Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds",
-                      enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds"]
+                      description: "The repository name in format 'owner/repo'. Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds, parkhub/data-migration, parkhub/sp-loadtesting",
+                      enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds", "parkhub/data-migration", "parkhub/sp-loadtesting"]
                     },
                     state: {
                       type: "string",
@@ -2699,8 +3037,8 @@ Bun.serve({
                   properties: {
                     repo: {
                       type: "string",
-                      description: "The FULL repository name in format 'owner/repo' (e.g., 'parkhub/graph-api', NOT just 'graph-api'). Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds",
-                      enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds"]
+                      description: "The FULL repository name in format 'owner/repo' (e.g., 'parkhub/graph-api', NOT just 'graph-api'). Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds, parkhub/data-migration, parkhub/sp-loadtesting",
+                      enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds", "parkhub/data-migration", "parkhub/sp-loadtesting"]
                     },
                     prNumber: {
                       type: "number",
@@ -2723,8 +3061,8 @@ Bun.serve({
                   properties: {
                     repo: {
                       type: "string",
-                      description: "The FULL repository name in format 'owner/repo' (e.g., 'parkhub/graph-api'). Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds",
-                      enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds"]
+                      description: "The FULL repository name in format 'owner/repo' (e.g., 'parkhub/graph-api'). Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds, parkhub/data-migration, parkhub/sp-loadtesting",
+                      enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds", "parkhub/data-migration", "parkhub/sp-loadtesting"]
                     },
                     workflowId: {
                       type: "string",
@@ -2751,8 +3089,8 @@ Bun.serve({
                   properties: {
                     repo: {
                       type: "string",
-                      description: "The FULL repository name in format 'owner/repo' (e.g., 'parkhub/graph-api'). Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds",
-                      enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds"]
+                      description: "The FULL repository name in format 'owner/repo' (e.g., 'parkhub/graph-api'). Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds, parkhub/data-migration, parkhub/sp-loadtesting",
+                      enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds", "parkhub/data-migration", "parkhub/sp-loadtesting"]
                     },
                     runId: {
                       type: "number",
@@ -2775,8 +3113,8 @@ Bun.serve({
                   properties: {
                     repo: {
                       type: "string",
-                      description: "The repository name in format 'owner/repo'. Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds",
-                      enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds"]
+                      description: "The repository name in format 'owner/repo'. Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds, parkhub/data-migration, parkhub/sp-loadtesting",
+                      enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds", "parkhub/data-migration", "parkhub/sp-loadtesting"]
                     },
                     branch: {
                       type: "string",
@@ -2822,6 +3160,52 @@ Bun.serve({
                 defer_loading: true
               },
               {
+                name: "update_github_pull_request",
+                description: "Update an existing GitHub pull request by pushing additional commits to its branch. Use this when you need to add changes to a PR that already exists, or when a user asks you to update/modify an existing PR. IMPORTANT: You must know the branch name - if unsure, ask the user or use the GitHub API to look it up by PR number.",
+                input_schema: {
+                  type: "object",
+                  properties: {
+                    repo: {
+                      type: "string",
+                      description: "The repository name in format 'owner/repo'. Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds, parkhub/data-migration, parkhub/sp-loadtesting",
+                      enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds", "parkhub/data-migration", "parkhub/sp-loadtesting"]
+                    },
+                    branch: {
+                      type: "string",
+                      description: "The existing branch name for the PR (e.g., 'fix/auth-bug'). This branch must already exist."
+                    },
+                    prNumber: {
+                      type: "number",
+                      description: "The PR number (optional, helps with logging and confirmation)"
+                    },
+                    files: {
+                      type: "array",
+                      description: "Array of files to create or update. Each file object must have 'path' (relative to repo root) and 'content' (full file content as string)",
+                      items: {
+                        type: "object",
+                        properties: {
+                          path: {
+                            type: "string",
+                            description: "File path relative to repo root (e.g., 'src/auth.ts', 'README.md')"
+                          },
+                          content: {
+                            type: "string",
+                            description: "Complete file content as a string"
+                          }
+                        },
+                        required: ["path", "content"]
+                      }
+                    },
+                    commitMessage: {
+                      type: "string",
+                      description: "Commit message that explains what changes are being added"
+                    }
+                  },
+                  required: ["repo", "branch", "files", "commitMessage"]
+                },
+                defer_loading: true
+              },
+              {
                 name: "get_jira_issue",
                 description: "Get details of a specific Jira ticket by its key (e.g., PV-123). Use this when users ask about a specific ticket, want to check ticket status, or reference a ticket number.",
                 input_schema: {
@@ -2838,20 +3222,24 @@ Bun.serve({
               },
               {
                 name: "search_jira_issues",
-                description: "Search for Jira tickets in the PV (Frontier) project by keywords. Use this when users ask to find tickets, search for work items, or look up tickets by topic (e.g., 'find tickets about authentication', 'search for API bugs').",
+                description: "Search for Jira tickets in the PV (Frontier) project by keywords and/or sprint. Use this when users ask to find tickets, search for work items, or look up tickets by topic (e.g., 'find tickets about authentication', 'search for API bugs', 'what's in the current sprint').",
                 input_schema: {
                   type: "object",
                   properties: {
                     query: {
                       type: "string",
-                      description: "Search keywords to find in ticket summaries and descriptions"
+                      description: "Search keywords to find in ticket summaries and descriptions (optional if sprintId is provided)"
+                    },
+                    sprintId: {
+                      type: "number",
+                      description: "Filter tickets by sprint ID (obtained from get_current_sprint). Use this when searching for tickets in a specific sprint."
                     },
                     maxResults: {
                       type: "number",
                       description: "Maximum number of results to return (default: 10, max: 50)"
                     }
                   },
-                  required: ["query"]
+                  required: []
                 },
                 defer_loading: true
               },
@@ -2886,6 +3274,16 @@ Bun.serve({
                     }
                   },
                   required: ["summary"]
+                },
+                defer_loading: true
+              },
+              {
+                name: "get_current_sprint",
+                description: "Get the current active sprint for the Frontier team. Use this when users reference 'current sprint', 'my team's sprint', 'this sprint', or 'active sprint'. Returns sprint name, dates, and ID which can be used to search for tickets.",
+                input_schema: {
+                  type: "object",
+                  properties: {},
+                  required: []
                 },
                 defer_loading: true
               }
@@ -3073,13 +3471,15 @@ Bun.serve({
               console.log("    ✅ Tool result received");
             } else if (toolUseBlock.name === "search_jira_issues") {
               console.log("  → Calling search_jira_issues");
-              console.log("    Query:", toolUseBlock.input.query);
+              console.log("    Query:", toolUseBlock.input.query || "None");
+              console.log("    Sprint ID:", toolUseBlock.input.sprintId || "None");
               console.log("    Max Results:", toolUseBlock.input.maxResults || 10);
               const searchIssuesRes = await fetch("http://localhost:3000/api/jira/search-issues", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                   query: toolUseBlock.input.query,
+                  sprintId: toolUseBlock.input.sprintId,
                   maxResults: toolUseBlock.input.maxResults
                 })
               });
@@ -3114,6 +3514,20 @@ Bun.serve({
 
               toolResult = await jiraRes.json();
               console.log("    ✅ Tool result:", toolResult);
+            } else if (toolUseBlock.name === "get_current_sprint") {
+              console.log("  → Calling get_current_sprint");
+              const sprintRes = await fetch("http://localhost:3000/api/jira/get-current-sprint", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({})
+              });
+
+              if (!sprintRes.ok) {
+                console.error("  ❌ Tool call failed with status:", sprintRes.status);
+              }
+
+              toolResult = await sprintRes.json();
+              console.log("    ✅ Tool result received");
             } else if (toolUseBlock.name === "read_github_file") {
               console.log("  → Calling read_github_file");
               console.log("    Repo:", toolUseBlock.input.repo);
@@ -3286,6 +3700,30 @@ Bun.serve({
 
               toolResult = await createPRRes.json();
               console.log("    ✅ Tool result received");
+            } else if (toolUseBlock.name === "update_github_pull_request") {
+              console.log("  → Calling update_github_pull_request");
+              console.log("    Repo:", toolUseBlock.input.repo);
+              console.log("    Branch:", toolUseBlock.input.branch);
+              console.log("    PR Number:", toolUseBlock.input.prNumber);
+              console.log("    Files:", toolUseBlock.input.files?.length);
+              const updatePRRes = await fetch("http://localhost:3000/api/github/update-pr", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  repo: toolUseBlock.input.repo,
+                  branch: toolUseBlock.input.branch,
+                  prNumber: toolUseBlock.input.prNumber,
+                  files: toolUseBlock.input.files,
+                  commitMessage: toolUseBlock.input.commitMessage
+                })
+              });
+
+              if (!updatePRRes.ok) {
+                console.error("  ❌ Tool call failed with status:", updatePRRes.status);
+              }
+
+              toolResult = await updatePRRes.json();
+              console.log("    ✅ Tool result received");
             } else if (toolUseBlock.name === "get_api_documentation") {
               console.log("  → Calling get_api_documentation");
               console.log("    Endpoint filter:", toolUseBlock.input.endpoint || "all");
@@ -3357,6 +3795,10 @@ Bun.serve({
                 {
                   type: "tool_search_tool_bm25_20251119",
                   name: "tool_search_tool_bm25"
+                },
+                {
+                  type: "text_editor_20250728",
+                  name: "str_replace_based_edit_tool"
                 },
                 {
                   name: "list_confluence_root",
@@ -3498,8 +3940,8 @@ Bun.serve({
                     properties: {
                       repo: {
                         type: "string",
-                        description: "The repository name in format 'owner/repo'. Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds",
-                        enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds"]
+                        description: "The repository name in format 'owner/repo'. Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds, parkhub/data-migration, parkhub/sp-loadtesting",
+                        enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds", "parkhub/data-migration", "parkhub/sp-loadtesting"]
                       },
                       limit: {
                         type: "number",
@@ -3518,8 +3960,8 @@ Bun.serve({
                     properties: {
                       repo: {
                         type: "string",
-                        description: "The repository name in format 'owner/repo'. Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds",
-                        enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds"]
+                        description: "The repository name in format 'owner/repo'. Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds, parkhub/data-migration, parkhub/sp-loadtesting",
+                        enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds", "parkhub/data-migration", "parkhub/sp-loadtesting"]
                       },
                       path: {
                         type: "string",
@@ -3542,8 +3984,8 @@ Bun.serve({
                     properties: {
                       repo: {
                         type: "string",
-                        description: "REQUIRED: The repository name in format 'owner/repo'. Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds",
-                        enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds"]
+                        description: "REQUIRED: The repository name in format 'owner/repo'. Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds, parkhub/data-migration, parkhub/sp-loadtesting",
+                        enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds", "parkhub/data-migration", "parkhub/sp-loadtesting"]
                       },
                       path: {
                         type: "string",
@@ -3571,7 +4013,7 @@ Bun.serve({
                       repo: {
                         type: "string",
                         description: "Optional: Limit search to a specific repo. If omitted, searches all Frontier repos.",
-                        enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds"]
+                        enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds", "parkhub/data-migration", "parkhub/sp-loadtesting"]
                       }
                     },
                     required: ["query"]
@@ -3586,8 +4028,8 @@ Bun.serve({
                     properties: {
                       repo: {
                         type: "string",
-                        description: "The repository name in format 'owner/repo'. Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds",
-                        enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds"]
+                        description: "The repository name in format 'owner/repo'. Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds, parkhub/data-migration, parkhub/sp-loadtesting",
+                        enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds", "parkhub/data-migration", "parkhub/sp-loadtesting"]
                       },
                       state: {
                         type: "string",
@@ -3611,8 +4053,8 @@ Bun.serve({
                     properties: {
                       repo: {
                         type: "string",
-                        description: "The FULL repository name in format 'owner/repo' (e.g., 'parkhub/graph-api', NOT just 'graph-api'). Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds",
-                        enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds"]
+                        description: "The FULL repository name in format 'owner/repo' (e.g., 'parkhub/graph-api', NOT just 'graph-api'). Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds, parkhub/data-migration, parkhub/sp-loadtesting",
+                        enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds", "parkhub/data-migration", "parkhub/sp-loadtesting"]
                       },
                       prNumber: {
                         type: "number",
@@ -3635,8 +4077,8 @@ Bun.serve({
                     properties: {
                       repo: {
                         type: "string",
-                        description: "The FULL repository name in format 'owner/repo' (e.g., 'parkhub/graph-api'). Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds",
-                        enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds"]
+                        description: "The FULL repository name in format 'owner/repo' (e.g., 'parkhub/graph-api'). Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds, parkhub/data-migration, parkhub/sp-loadtesting",
+                        enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds", "parkhub/data-migration", "parkhub/sp-loadtesting"]
                       },
                       workflowId: {
                         type: "string",
@@ -3663,8 +4105,8 @@ Bun.serve({
                     properties: {
                       repo: {
                         type: "string",
-                        description: "The FULL repository name in format 'owner/repo' (e.g., 'parkhub/graph-api'). Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds",
-                        enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds"]
+                        description: "The FULL repository name in format 'owner/repo' (e.g., 'parkhub/graph-api'). Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds, parkhub/data-migration, parkhub/sp-loadtesting",
+                        enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds", "parkhub/data-migration", "parkhub/sp-loadtesting"]
                       },
                       runId: {
                         type: "number",
@@ -3687,8 +4129,8 @@ Bun.serve({
                     properties: {
                       repo: {
                         type: "string",
-                        description: "The repository name in format 'owner/repo'. Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds",
-                        enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds"]
+                        description: "The repository name in format 'owner/repo'. Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds, parkhub/data-migration, parkhub/sp-loadtesting",
+                        enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds", "parkhub/data-migration", "parkhub/sp-loadtesting"]
                       },
                       branch: {
                         type: "string",
@@ -3734,6 +4176,52 @@ Bun.serve({
                   defer_loading: true
                 },
                 {
+                  name: "update_github_pull_request",
+                  description: "Update an existing GitHub pull request by pushing additional commits to its branch. Use this when you need to add changes to a PR that already exists, or when a user asks you to update/modify an existing PR. IMPORTANT: You must know the branch name - if unsure, ask the user or use the GitHub API to look it up by PR number.",
+                  input_schema: {
+                    type: "object",
+                    properties: {
+                      repo: {
+                        type: "string",
+                        description: "The repository name in format 'owner/repo'. Must be one of: parkhub/smartpass-api, parkhub/graph-api, parkhub/smartpass-ui, parkhub/smartpass-admin-ui, parkhub/egds, parkhub/data-migration, parkhub/sp-loadtesting",
+                        enum: ["parkhub/smartpass-api", "parkhub/graph-api", "parkhub/smartpass-ui", "parkhub/smartpass-admin-ui", "parkhub/egds", "parkhub/data-migration", "parkhub/sp-loadtesting"]
+                      },
+                      branch: {
+                        type: "string",
+                        description: "The existing branch name for the PR (e.g., 'fix/auth-bug'). This branch must already exist."
+                      },
+                      prNumber: {
+                        type: "number",
+                        description: "The PR number (optional, helps with logging and confirmation)"
+                      },
+                      files: {
+                        type: "array",
+                        description: "Array of files to create or update. Each file object must have 'path' (relative to repo root) and 'content' (full file content as string)",
+                        items: {
+                          type: "object",
+                          properties: {
+                            path: {
+                              type: "string",
+                              description: "File path relative to repo root (e.g., 'src/auth.ts', 'README.md')"
+                            },
+                            content: {
+                              type: "string",
+                              description: "Complete file content as a string"
+                            }
+                          },
+                          required: ["path", "content"]
+                        }
+                      },
+                      commitMessage: {
+                        type: "string",
+                        description: "Commit message that explains what changes are being added"
+                      }
+                    },
+                    required: ["repo", "branch", "files", "commitMessage"]
+                  },
+                  defer_loading: true
+                },
+                {
                   name: "get_jira_issue",
                   description: "Get details of a specific Jira ticket by its key (e.g., PV-123). Use this when users ask about a specific ticket, want to check ticket status, or reference a ticket number.",
                   input_schema: {
@@ -3750,20 +4238,24 @@ Bun.serve({
                 },
                 {
                   name: "search_jira_issues",
-                  description: "Search for Jira tickets in the PV (Frontier) project by keywords. Use this when users ask to find tickets, search for work items, or look up tickets by topic (e.g., 'find tickets about authentication', 'search for API bugs').",
+                  description: "Search for Jira tickets in the PV (Frontier) project by keywords and/or sprint. Use this when users ask to find tickets, search for work items, or look up tickets by topic (e.g., 'find tickets about authentication', 'search for API bugs', 'what's in the current sprint').",
                   input_schema: {
                     type: "object",
                     properties: {
                       query: {
                         type: "string",
-                        description: "Search keywords to find in ticket summaries and descriptions"
+                        description: "Search keywords to find in ticket summaries and descriptions (optional if sprintId is provided)"
+                      },
+                      sprintId: {
+                        type: "number",
+                        description: "Filter tickets by sprint ID (obtained from get_current_sprint). Use this when searching for tickets in a specific sprint."
                       },
                       maxResults: {
                         type: "number",
                         description: "Maximum number of results to return (default: 10, max: 50)"
                       }
                     },
-                    required: ["query"]
+                    required: []
                   },
                   defer_loading: true
                 },
@@ -3798,6 +4290,16 @@ Bun.serve({
                       }
                     },
                     required: ["summary"]
+                  },
+                  defer_loading: true
+                },
+                {
+                  name: "get_current_sprint",
+                  description: "Get the current active sprint for the Frontier team. Use this when users reference 'current sprint', 'my team's sprint', 'this sprint', or 'active sprint'. Returns sprint name, dates, and ID which can be used to search for tickets.",
+                  input_schema: {
+                    type: "object",
+                    properties: {},
+                    required: []
                   },
                   defer_loading: true
                 }
